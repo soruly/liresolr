@@ -67,6 +67,8 @@ import java.io.IOException;
 import java.net.URL;
 import java.util.*;
 
+import java.io.*;
+
 /**
  * This is the main LIRE RequestHandler for the Solr Plugin. It supports query by example using the indexed id,
  * an url or a feature vector. Furthermore, feature extraction and random selection of images are supported.
@@ -133,6 +135,10 @@ public class LireRequestHandler extends RequestHandlerBase {
             handleIdSearch(req, rsp);
         } else if (req.getParams().get("extract") != null) { // we are trying to extract from an image URL.
             handleExtract(req, rsp);
+        } else if (req.getParams().get("file") != null) { // we are searching for an image based on an file
+            handleFileSearch(req, rsp);
+        } else if (req.getParams().get("analyze") != null) { // we are trying to extract from an image file.
+            handleExtractFile(req, rsp);
         } else { // lets return random results.
             handleRandomSearch(req, rsp);
         }
@@ -305,6 +311,68 @@ public class LireRequestHandler extends RequestHandlerBase {
     }
 
     /**
+     * Searches for an image given by an URL. Note that (i) extracting image features takes time and
+     * (ii) not every image is readable by Java.
+     *
+     * @param req
+     * @param rsp
+     * @throws IOException
+     * @throws InstantiationException
+     * @throws IllegalAccessException
+     */
+    private void handleFileSearch(SolrQueryRequest req, SolrQueryResponse rsp) throws IOException, InstantiationException, IllegalAccessException {
+        SolrParams params = req.getParams();
+        String paramFile = params.get("file");
+        String paramField = req.getParams().get("field", "cl_ha");
+        if (!paramField.endsWith("_ha")) paramField += "_ha";
+        int paramRows = params.getInt("rows", defaultNumberOfResults);
+        numberOfQueryTerms = req.getParams().getDouble("accuracy", DEFAULT_NUMBER_OF_QUERY_TERMS);
+        numberOfCandidateResults = req.getParams().getInt("candidates", DEFAULT_NUMBER_OF_CANDIDATES);
+        useMetricSpaces = req.getParams().getBool("ms", DEFAULT_USE_METRIC_SPACES);
+
+
+        GlobalFeature feat = null;
+        int[] hashes = null;
+        Query query = null;
+        // wrapping the whole part in the try
+        try {
+            BufferedImage img = ImageIO.read(new File(paramFile));
+            img = ImageUtils.trimWhiteSpace(img);
+            // getting the right feature per field:
+            if (FeatureRegistry.getClassForHashField(paramField) == null) // if the feature is not registered.
+                feat = new ColorLayout();
+            else {
+                feat = (GlobalFeature) FeatureRegistry.getClassForHashField(paramField).newInstance();
+            }
+            feat.extract(img);
+
+            if (!useMetricSpaces) {
+                // Re-generating the hashes to save space (instead of storing them in the index)
+                HashTermStatistics.addToStatistics(req.getSearcher(), paramField);
+                hashes = BitSampling.generateHashes(feat.getFeatureVector());
+                query = createQuery(hashes, paramField, numberOfQueryTerms);
+            } else if (MetricSpaces.supportsFeature(feat)) {
+                // ----< Metric Spaces >-----
+                int queryLength = (int) StatsUtils.clamp(numberOfQueryTerms * MetricSpaces.getPostingListLength(feat), 3, MetricSpaces.getPostingListLength(feat));
+                String msQuery = MetricSpaces.generateBoostedQuery(feat, queryLength);
+                QueryParser qp = new QueryParser(paramField.replace("_ha", "_ms"), new WhitespaceAnalyzer());
+                query = qp.parse(msQuery);
+            } else {
+                rsp.add("Error", "Feature not supported by MetricSpaces: " + feat.getClass().getSimpleName());
+                query = new MatchAllDocsQuery();
+            }
+
+        } catch (Exception e) {
+            rsp.add("Error", "Error reading image from file: " + paramFile + ": " + e.getMessage());
+            e.printStackTrace();
+        }
+        // search if the feature has been extracted and query is there.
+        if (feat != null && query != null) {
+            doSearch(req, rsp, req.getSearcher(), paramField, paramRows, getFilterQuery(req.getParams().get("fq")), query, feat);
+        }
+    }
+
+    /**
      * Methods orders around the hashes already by docFreq removing those with docFreq == 0
      *
      * @param req
@@ -351,6 +419,58 @@ public class LireRequestHandler extends RequestHandlerBase {
             }
         } catch (Exception e) {
             rsp.add("Error", "Error reading image from URL: " + paramUrl + ": " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+
+    /**
+     * Methods orders around the hashes already by docFreq removing those with docFreq == 0
+     *
+     * @param req
+     * @param rsp
+     * @throws IOException
+     * @throws InstantiationException
+     * @throws IllegalAccessException
+     */
+    private void handleExtractFile(SolrQueryRequest req, SolrQueryResponse rsp) throws IOException, InstantiationException, IllegalAccessException {
+        SolrParams params = req.getParams();
+        String paramFile = params.get("analyze");
+        String paramField = req.getParams().get("field", "cl_ha");
+        if (!paramField.endsWith("_ha")) paramField += "_ha";
+        useMetricSpaces = req.getParams().getBool("ms", DEFAULT_USE_METRIC_SPACES);
+        double accuracy = req.getParams().getDouble("accuracy", DEFAULT_NUMBER_OF_QUERY_TERMS);
+        GlobalFeature feat;
+        // wrapping the whole part in the try
+        try {
+            BufferedImage img = ImageIO.read(new File(paramFile));
+            img = ImageUtils.trimWhiteSpace(img);
+            // getting the right feature per field:
+            if (FeatureRegistry.getClassForHashField(paramField) == null) // if the feature is not registered.
+                feat = new ColorLayout();
+            else {
+                feat = (GlobalFeature) FeatureRegistry.getClassForHashField(paramField).newInstance();
+            }
+            feat.extract(img);
+            rsp.add("histogram", Base64.encodeBase64String(feat.getByteArrayRepresentation()));
+            if (!useMetricSpaces || true) { // only if the field is available was the original way
+                HashTermStatistics.addToStatistics(req.getSearcher(), paramField);
+                int[] hashes = BitSampling.generateHashes(feat.getFeatureVector());
+                List<String> hashStrings = orderHashes(hashes, paramField, false);
+                rsp.add("bs_list", hashStrings);
+                List<String> hashQuery = orderHashes(hashes, paramField, true);
+                int queryLength = (int) StatsUtils.clamp(accuracy * hashes.length,
+                        3, hashQuery.size());
+                rsp.add("bs_query", String.join(" ", hashQuery.subList(0, queryLength)));
+            }
+            if (MetricSpaces.supportsFeature(feat)) {
+                rsp.add("ms_list", MetricSpaces.generateHashList(feat));
+                int queryLength = (int) StatsUtils.clamp(accuracy * MetricSpaces.getPostingListLength(feat),
+                        3, MetricSpaces.getPostingListLength(feat));
+                rsp.add("ms_query", MetricSpaces.generateBoostedQuery(feat, queryLength));
+            }
+        } catch (Exception e) {
+            rsp.add("Error", "Error reading image from file: " + paramFile + ": " + e.getMessage());
             e.printStackTrace();
         }
     }

@@ -1,5 +1,9 @@
 # LireSolr Change Log
 
+**2017-05-27**
+* Updated to Solr 6.5.1
+* Updated docker image to Solr 6.5.1
+
 **2017-02-05**
 * Implemented image caching for FlickrDownloader tool and the respective use of the cache in the Python file for image classification.
 
