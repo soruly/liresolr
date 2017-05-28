@@ -127,7 +127,7 @@ public class LireRequestHandler extends RequestHandlerBase {
     @Override
     public void handleRequestBody(SolrQueryRequest req, SolrQueryResponse rsp) throws Exception {
         // (1) check if the necessary parameters are here
-        if (req.getParams().get("hashes") != null) { // we are searching for hashes ...
+        if (req.getParams().get("feature") != null) { // we are searching for hashes ...
             handleHashSearch(req, rsp); // not really supported, just here for legacy.
         } else if (req.getParams().get("url") != null) { // we are searching for an image based on an URL
             handleUrlSearch(req, rsp);

@@ -105,18 +105,14 @@ public class ParallelSolrIndexer implements Runnable {
 
     File fileList = null;
     File outFile = null;
-    private int monitoringInterval = 10;
+    private int monitoringInterval = 1000;
     private int maxSideLength = 512;
-    private boolean isPreprocessing = true;
+    private boolean isPreprocessing = false;
     private Class imageDataProcessor = null;
 
     public ParallelSolrIndexer() {
         // default constructor.
         listOfFeatures = new HashSet<Class>();
-        listOfFeatures.add(PHOG.class);
-        listOfFeatures.add(ColorLayout.class);
-        listOfFeatures.add(EdgeHistogram.class);
-        listOfFeatures.add(JCD.class);
 
         HashingMetricSpacesManager.init(); // load reference points from disk.
 
@@ -195,6 +191,17 @@ public class ParallelSolrIndexer implements Runnable {
                 e.setUseBothHashingAlgortihms(true);
             } else if (arg.startsWith("-l")) {
                 e.setUseMetricSpaces(true);
+            } else if (arg.startsWith("-w")) {
+                if ((i + 1) < args.length) {
+                    try {
+                        int w = Integer.parseInt(args[i + 1]);
+                        if (w > 10)
+                            e.setMonitoringInterval(w);
+                    } catch (NumberFormatException e1) {
+                        e1.printStackTrace();
+                        printHelp();
+                    }
+                } else printHelp();
             } else if (arg.startsWith("-h")) {
                 // help
                 printHelp();
@@ -222,21 +229,23 @@ public class ParallelSolrIndexer implements Runnable {
         System.out.println("This help text is shown if you start the ParallelSolrIndexer with the '-h' option.\n" +
                 "\n" +
                 "$> ParallelSolrIndexer -i <infile> [-o <outfile>] [-n <threads>] [-f] [-p] [-l] [-a] [-m <max_side_length>] [-r <full class name>] \\\\ \n" +
-                "         [-y <list of feature classes>]\n" +
+                "         [-y <list of feature classes>] [-w <monitoring interval (ms)]\n" +
                 "\n" +
                 "Note: if you don't specify an outfile just \".xml\" is appended to the input image for output. So there will be one XML\n" +
                 "file per image. Specifying an outfile will collect the information of all images in one single file.\n" +
                 "\n" +
                 "-n ... number of threads should be something your computer can cope with. default is 4.\n" +
                 "-f ... forces overwrite of outfile\n" +
-                "-p ... enables image processing before indexing (despeckle, trim white space)\n" +
+                "-p ... enables image processing before indexing (despeckle, trim white space). default is false.\n" +
                 "-a ... use both BitSampling and MetricSpaces.\n" +
                 "-l ... disables BitSampling and uses MetricSpaces instead.\n" +
                 "-m ... maximum side length of images when indexed. All bigger files are scaled down. default is 512.\n" +
                 "-r ... defines a class implementing net.semanticmetadata.lire.solr.indexing.ImageDataProcessor\n" +
                 "       that provides additional fields.\n" +
                 "-y ... defines which feature classes are to be extracted. default is \"-y ph,cl,eh,jc\". \"-y ce,ac\" would \n" +
-                "       add to the other four features. ");
+                "       add to the other four features. \n" +
+                "-w ... monitoring interval (ms). default is 1000"
+                );
     }
 
     public static String arrayToString(int[] array) {
@@ -285,6 +294,14 @@ public class ParallelSolrIndexer implements Runnable {
 
     public void setMaxSideLength(int maxSideLength) {
         this.maxSideLength = maxSideLength;
+    }
+
+    public int getMonitoringInterval() {
+        return monitoringInterval;
+    }
+
+    public void setMonitoringInterval(int monitoringInterval) {
+        this.monitoringInterval = monitoringInterval;
     }
 
     private boolean isConfigured() {
@@ -399,7 +416,7 @@ public class ParallelSolrIndexer implements Runnable {
         public void run() {
             long ms = System.currentTimeMillis();
             try {
-                Thread.sleep(1000 * monitoringInterval); // wait xx seconds
+                Thread.sleep(monitoringInterval); // wait xx seconds
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
@@ -408,7 +425,7 @@ public class ParallelSolrIndexer implements Runnable {
                     // print the current status:
                     long time = System.currentTimeMillis() - ms;
                     System.out.println("Analyzed " + overallCount + " images in " + time / 1000 + " seconds, " + ((overallCount > 0) ? (time / overallCount) : "n.a.") + " ms each (" + images.size() + " images currently in queue).");
-                    Thread.sleep(1000 * monitoringInterval); // wait xx seconds
+                    Thread.sleep(monitoringInterval); // wait xx seconds
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
@@ -495,12 +512,12 @@ public class ParallelSolrIndexer implements Runnable {
                         // --------< preprocessing >-------------------------
 //                        // converts color space to INT_RGB
                         BufferedImage img = ImageUtils.createWorkingCopy(read);
-//                        if (isPreprocessing) {
+                        if (isPreprocessing) {
 //                            // despeckle
 //                            DespeckleFilter df = new DespeckleFilter();
 //                            img = df.filter(img, null);
                             img = ImageUtils.trimWhiteSpace(img); // trims white space
-//                        }
+                        }
                         // --------< / preprocessing >-------------------------
 
                         if (maxSideLength > 50)
