@@ -426,7 +426,7 @@ public class LireRequestHandler extends RequestHandlerBase {
         }
         // search if the feature has been extracted and query is there.
         if (feat != null && query != null) {
-            doSearch(req, rsp, req.getSearcher(), paramField, paramRows, getFilterQuery(req.getParams().get("fq")), query, feat);
+            doSearch(req, rsp, req.getSearcher(), paramField, paramRows, getFilterQueries(req), query, feat);
         }
     }
 
