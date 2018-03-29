@@ -117,8 +117,8 @@ public class LireRequestHandler extends RequestHandlerBase {
      * score, the less the faster. I put down a minimum of three in the method, this value gives
      * the percentage of the overall number used (selected randomly).
      */
-    private double numberOfQueryTerms = 0.33;
-    private static final double DEFAULT_NUMBER_OF_QUERY_TERMS = 0.33;
+    private int numberOfQueryTerms = 0;
+    private static final int DEFAULT_ID_OF_QUERY_TERMS = 0;
 
     /**
      * If metric spaces should be used instead of BitSampling.
@@ -188,7 +188,7 @@ public class LireRequestHandler extends RequestHandlerBase {
                 tmpParamField += "_ha";
             }
             final String paramField = tmpParamField;
-            numberOfQueryTerms = req.getParams().getDouble("accuracy", DEFAULT_NUMBER_OF_QUERY_TERMS);
+            numberOfQueryTerms = req.getParams().getInt("accuracy", DEFAULT_ID_OF_QUERY_TERMS);
             numberOfCandidateResults = req.getParams().getInt("candidates", DEFAULT_NUMBER_OF_CANDIDATES);
             useMetricSpaces = req.getParams().getBool("ms", DEFAULT_USE_METRIC_SPACES);
             int paramRows = req.getParams().getInt("rows", defaultNumberOfResults);
@@ -322,7 +322,7 @@ public class LireRequestHandler extends RequestHandlerBase {
             paramField += "_ha";
         }
         int paramRows = params.getInt("rows", defaultNumberOfResults);
-        numberOfQueryTerms = req.getParams().getDouble("accuracy", DEFAULT_NUMBER_OF_QUERY_TERMS);
+        numberOfQueryTerms = req.getParams().getInt("accuracy", DEFAULT_ID_OF_QUERY_TERMS);
         numberOfCandidateResults = req.getParams().getInt("candidates", DEFAULT_NUMBER_OF_CANDIDATES);
         useMetricSpaces = req.getParams().getBool("ms", DEFAULT_USE_METRIC_SPACES);
 
@@ -384,7 +384,7 @@ public class LireRequestHandler extends RequestHandlerBase {
         String paramField = req.getParams().get("field", "cl_ha");
         if (!paramField.endsWith("_ha")) paramField += "_ha";
         int paramRows = params.getInt("rows", defaultNumberOfResults);
-        numberOfQueryTerms = req.getParams().getDouble("accuracy", DEFAULT_NUMBER_OF_QUERY_TERMS);
+        numberOfQueryTerms = req.getParams().getInt("accuracy", DEFAULT_ID_OF_QUERY_TERMS);
         numberOfCandidateResults = req.getParams().getInt("candidates", DEFAULT_NUMBER_OF_CANDIDATES);
         useMetricSpaces = req.getParams().getBool("ms", DEFAULT_USE_METRIC_SPACES);
 
@@ -447,7 +447,7 @@ public class LireRequestHandler extends RequestHandlerBase {
             paramField += "_ha";
         }
         useMetricSpaces = req.getParams().getBool("ms", DEFAULT_USE_METRIC_SPACES);
-        double accuracy = req.getParams().getDouble("accuracy", DEFAULT_NUMBER_OF_QUERY_TERMS);
+        double accuracy = req.getParams().getDouble("accuracy", DEFAULT_ID_OF_QUERY_TERMS);
         GlobalFeature feat;
         // wrapping the whole part in the try
         try {
@@ -499,7 +499,7 @@ public class LireRequestHandler extends RequestHandlerBase {
         String paramField = req.getParams().get("field", "cl_ha");
         if (!paramField.endsWith("_ha")) paramField += "_ha";
         useMetricSpaces = req.getParams().getBool("ms", DEFAULT_USE_METRIC_SPACES);
-        double accuracy = req.getParams().getDouble("accuracy", DEFAULT_NUMBER_OF_QUERY_TERMS);
+        double accuracy = req.getParams().getDouble("accuracy", DEFAULT_ID_OF_QUERY_TERMS);
         GlobalFeature feat;
         // wrapping the whole part in the try
         try {
@@ -562,7 +562,7 @@ public class LireRequestHandler extends RequestHandlerBase {
             paramField += "_ha";
         }
         int paramRows = params.getInt("rows", defaultNumberOfResults);
-        numberOfQueryTerms = req.getParams().getDouble("accuracy", DEFAULT_NUMBER_OF_QUERY_TERMS);
+        numberOfQueryTerms = req.getParams().getInt("accuracy", DEFAULT_ID_OF_QUERY_TERMS);
         numberOfCandidateResults = req.getParams().getInt("candidates", DEFAULT_NUMBER_OF_CANDIDATES);
         useMetricSpaces = req.getParams().getBool("ms", DEFAULT_USE_METRIC_SPACES);
 
@@ -784,27 +784,21 @@ public class LireRequestHandler extends RequestHandlerBase {
 
     /**
      * Makes a Boolean query out of a list of hashes by ordering them ascending using their docFreq and
-     * then only using the most distinctive ones, defined by size in [0.1, 1], size=1 takes all.
+     * then only using the most distinctive ones, defined by i, 0-4096 as n-th query term in hash list.
      *
      * @param hashes
      * @param paramField
-     * @param size       in [0.1, 1]
+     * @param i
      * @return
      */
-    private BooleanQuery createQuery(int[] hashes, String paramField, double size) {
-        size = Math.max(0.1, Math.min(size, 1d)); // clamp size.
+    private BooleanQuery createQuery(int[] hashes, String paramField, int i) {
         List<String> hList = orderHashes(hashes, paramField, true);
-        int numHashes = (int) Math.min(hList.size(), Math.floor(hashes.length * size));
-        // a minimum of 3 hashes ...
-        if (numHashes < 3) {
-            numHashes = 3;
-        }
 
         BooleanQuery.Builder queryBuilder = new BooleanQuery.Builder();
-        for (int i = 0; i < numHashes; i++) {
-            // be aware that the hashFunctionsFileName of the field must match the one you put the hashes in before.
-            queryBuilder.add(new BooleanClause(new TermQuery(new Term(paramField, hList.get(i))), BooleanClause.Occur.SHOULD));
-        }
+        
+        // be aware that the hashFunctionsFileName of the field must match the one you put the hashes in before.
+        queryBuilder.add(new BooleanClause(new TermQuery(new Term(paramField, hList.get(Math.min(hList.size(), i)))), BooleanClause.Occur.SHOULD));
+        
         // this query is just for boosting the results with more matching hashes. We'd need to match it to all docs.
         //queryBuilder.add(new BooleanClause(new MatchAllDocsQuery(), BooleanClause.Occur.SHOULD));
         BooleanQuery query = queryBuilder.build();
