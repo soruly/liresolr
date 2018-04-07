@@ -1,3 +1,7 @@
+## liresolr
+
+[![Build Status](https://travis-ci.org/soruly/liresolr.svg?branch=master)](https://travis-ci.org/soruly/liresolr)
+
 LIRE Solr Integration Project
 =============================
 
