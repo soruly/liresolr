@@ -1,6 +1,7 @@
 ## liresolr
 
 [![Build Status](https://travis-ci.org/soruly/liresolr.svg?branch=master)](https://travis-ci.org/soruly/liresolr)
+[![Docker Build Status](https://img.shields.io/docker/build/soruly/liresolr.svg)](https://hub.docker.com/r/soruly/liresolr/)
 
 LIRE Solr Integration Project
 =============================
