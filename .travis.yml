@@ -1,0 +1,17 @@
+language: java
+jdk:
+- openjdk8
+script:
+- "./gradlew distForSolr"
+deploy:
+  provider: releases
+  api_key:
+    secure: LnN6q1W+TZ8jIxEWIyp286HQPTJ3SbYEZR/uNObPPnb1DA2AMnHjQ+Znv6f1iAhAhzScInhPhaFffEdPNXtVF3IuQgSMO1LT9Jx9Y4WkmSkVYF2a0n1p4yoiB2w1huWrbDH5vfb2WeWlkiPL8+kF9mjrnDgC9KYJS3aGGCH5+Y5Zqdr8zVaIZ8Oz9dAZfTR/qSjKgyCQGV4L2NUvmNUlXSf9c3RaG2ASwRo05tZE1sTLEJCqhH2lgPREt6aURrcnvzlIkJLl1XxgB0UEcyHb4dgyLlT4vb7ddfAsORNBqr5DQWXBvFrNZRr020muziH6+0CUdo1Ip6YhRtJEpFzomm7x7ZLBxPGNW9gOmGiaEpuhlCShGP2r5Tqqrki+d9KqCRlZKoDmlBrTU3cXnWgejz9BhHW3J6sM7FxEphOQ9r330UP6tZDgroMa/IcnQp01kZiDXY7imEsTCSkaqBo8EN1fNcAWr0NnJVoVOyGbc0+Wn+LYDN3riqQYfhqOX6lbpoRYacsK1/jzp87tbRNyfFPclcD/qqTGB3H7dBoe2w01rwO6NBLSUr3MJfOcIqPmCXgHJHHvNOx1JAsEUyvbblyT9z73pg6vjWO+y4kCRd0Gp8CU+WAsXUvZq8rn6uS75RRDEjFRCFe6Mq4QSzcBmD2H9hIMVLIaiyz5aSCXmwc=
+  file:
+    - "dist/lire.jar"
+    - "dist/liresolr.jar"
+  skip_cleanup: true
+  on:
+    repo: soruly/liresolr
+    branch: master
+    tags: true
