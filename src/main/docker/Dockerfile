@@ -8,7 +8,7 @@
 # -- Running the docker image
 # $ docker run -p 8983:8983 dermotte/liresolr:latest
 
-FROM solr:6.5.1
+FROM solr:7.5.0
 
 MAINTAINER  Mathias Lux "mathias@juggle.at"
 
