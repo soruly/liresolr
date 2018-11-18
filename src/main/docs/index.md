@@ -1,5 +1,5 @@
 # LIRE & Solr
-*Version: 6.5.1*
+*Version: 7.5.0*
 
 This is a collection of documents that should help you to find your way around the LireSolr project. 
 
