@@ -105,7 +105,7 @@ public class ParallelSolrIndexer implements Runnable {
 
     File fileList = null;
     File outFile = null;
-    private int monitoringInterval = 10;
+    private int monitoringInterval = 1;
     private int maxSideLength = 512;
     private boolean isPreprocessing = false;
     private Class imageDataProcessor = null;
