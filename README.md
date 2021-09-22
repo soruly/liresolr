@@ -24,7 +24,8 @@ Run the docker. This would create solr core and start the server.
 ```bash
 docker run -d -p 8983:8983 \
   -v /var/mycores:/opt/solr/server/solr/mycores \
-   ghcr.io/soruly/liresolr:latest solr-precreate mycore
+   ghcr.io/soruly/liresolr:latest solr-precreate mycore \
+   /opt/solr/server/solr/configsets/liresolr
 ```
 
 Head over to http://127.0.0.1:8983 and you should see your cores created and loaded
