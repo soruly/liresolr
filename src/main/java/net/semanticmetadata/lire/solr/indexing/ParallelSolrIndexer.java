@@ -435,13 +435,7 @@ public class ParallelSolrIndexer implements Runnable {
 
                         // --------< creating doc >-------------------------
                         sb.append("<doc>");
-                        sb.append("<field name=\"localimagefile\">");
-                        sb.append(tmp.getFileName());
-                        sb.append("</field>");
                         sb.append("<field name=\"id\">");
-                        sb.append(tmp.getFileName());
-                        sb.append("</field>");
-                        sb.append("<field name=\"title\">");
                         sb.append(tmp.getFileName());
                         sb.append("</field>");
 
