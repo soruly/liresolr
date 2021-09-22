@@ -65,14 +65,13 @@ import java.util.concurrent.LinkedBlockingQueue;
  * "dir /s /b &gt; list.txt" or "find /path/to/images -name "*.jpg" &gt; list.txt".
  *
  * use it like:
- * <pre>$&gt; java -jar lire-request-handler.jar -i &lt;infile&gt; [-o &lt;outfile&gt;] [-n &lt;threads&gt;] [-m &lt;max_side_length&gt;] [-f]</pre>
+ * <pre>$&gt; java -jar lire-request-handler.jar -i &lt;infile&gt; [-o &lt;outfile&gt;] [-n &lt;threads&gt;] [-f]</pre>
  *
  * Available options are:
  * <ul>
  * <li> -i &lt;infile&gt; ... gives a file with a list of images to be indexed, one per line.</li>
  * <li> -o &lt;outfile&gt; ... gives XML file the output is written to. if none is given the outfile is &lt;infile&gt;.xml</li>
  * <li> -n &lt;threads&gt; ... gives the number of threads used for extraction. The number of cores is a good value for that.</li>
- * <li> -m &lt;max-side-length&gt; ... gives a maximum side length for extraction. This option is useful if very larger images are indexed.</li>
  * <li> -f ... forces to overwrite the &lt;outfile&gt;. If the &lt;outfile&gt; already exists and -f is not given, then the operation is aborted.</li>
  * <li> -p ... enables image processing before indexing (despeckle, trim white space)</li>
  * <li> -a ... use both BitSampling and MetricSpaces.</li>
@@ -105,7 +104,6 @@ public class ParallelSolrIndexer implements Runnable {
     File fileList = null;
     File outFile = null;
     private int monitoringInterval = 1;
-    private int maxSideLength = 512;
     private boolean isPreprocessing = false;
 
     public ParallelSolrIndexer() {
@@ -145,18 +143,6 @@ public class ParallelSolrIndexer implements Runnable {
                 if ((i + 1) < args.length)
                     e.setOutFile(new File(args[i + 1]));
                 else printHelp();
-            } else if (arg.startsWith("-m")) {
-                // out file
-                if ((i + 1) < args.length) {
-                    try {
-                        int s = Integer.parseInt(args[i + 1]);
-                        if (s > 10)
-                            e.setMaxSideLength(s);
-                    } catch (NumberFormatException e1) {
-                        e1.printStackTrace();
-                        printHelp();
-                    }
-                } else printHelp();
             } else if (arg.startsWith("-f") || arg.startsWith("--force")) {
                 e.setForce(true);
             } else if (arg.startsWith("-y") || arg.startsWith("--features")) {
@@ -202,7 +188,7 @@ public class ParallelSolrIndexer implements Runnable {
     private static void printHelp() {
         System.out.println("This help text is shown if you start the ParallelSolrIndexer with the '-h' option.\n" +
                 "\n" +
-                "$> ParallelSolrIndexer -i <infile> [-o <outfile>] [-n <threads>] [-f] [-p] [-l] [-a] [-m <max_side_length>] [-r <full class name>] \\\\ \n" +
+                "$> ParallelSolrIndexer -i <infile> [-o <outfile>] [-n <threads>] [-f] [-p] [-l] [-a] \\\\ \n" +
                 "         [-y <list of feature classes>]\n" +
                 "\n" +
                 "Note: if you don't specify an outfile just \".xml\" is appended to the input image for output. So there will be one XML\n" +
@@ -213,7 +199,6 @@ public class ParallelSolrIndexer implements Runnable {
                 "-p ... enables image processing before indexing (despeckle, trim white space). default is false.\n" +
                 "-a ... use both BitSampling and MetricSpaces.\n" +
                 "-l ... disables BitSampling and uses MetricSpaces instead.\n" +
-                "-m ... maximum side length of images when indexed. All bigger files are scaled down. default is 512.\n" +
                 "-y ... defines which feature classes are to be extracted. default is \"-y ph,cl,eh,jc\". \"-y ce,ac\" would \n" +
                 "       add to the other four features. ");
     }
@@ -252,14 +237,6 @@ public class ParallelSolrIndexer implements Runnable {
      */
     public void setOutFile(File outFile) {
         this.outFile = outFile;
-    }
-
-    public int getMaxSideLength() {
-        return maxSideLength;
-    }
-
-    public void setMaxSideLength(int maxSideLength) {
-        this.maxSideLength = maxSideLength;
     }
 
     private boolean isConfigured() {
@@ -476,19 +453,6 @@ public class ParallelSolrIndexer implements Runnable {
                             img = ImageUtils.trimWhiteSpace(img); // trims white space
                         }
                         // --------< / preprocessing >-------------------------
-
-                        if (maxSideLength > 50)
-                            img = ImageUtils.scaleImage(img, maxSideLength); // scales image to 512 max sidelength.
-
-                        else if (img.getWidth() < 32 || img.getHeight() < 32) { // image is too small to be worked with, for now I just do an upscale.
-                            double scaleFactor = 128d;
-                            if (img.getWidth() > img.getHeight()) {
-                                scaleFactor = (128d / (double) img.getWidth());
-                            } else {
-                                scaleFactor = (128d / (double) img.getHeight());
-                            }
-                            img = ImageUtils.scaleImage(img, ((int) (scaleFactor * img.getWidth())), (int) (scaleFactor * img.getHeight()));
-                        }
 
                         // --------< creating doc >-------------------------
                         sb.append("<doc>");
