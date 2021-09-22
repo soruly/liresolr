@@ -73,7 +73,6 @@ import java.util.concurrent.LinkedBlockingQueue;
  * <li> -o &lt;outfile&gt; ... gives XML file the output is written to. if none is given the outfile is &lt;infile&gt;.xml</li>
  * <li> -n &lt;threads&gt; ... gives the number of threads used for extraction. The number of cores is a good value for that.</li>
  * <li> -f ... forces to overwrite the &lt;outfile&gt;. If the &lt;outfile&gt; already exists and -f is not given, then the operation is aborted.</li>
- * <li> -p ... enables image processing before indexing (despeckle, trim white space)</li>
  * <li> -a ... use both BitSampling and MetricSpaces.</li>
  * <li> -l ... disables BitSampling and uses MetricSpaces instead.</li>
  * </ul>
@@ -104,7 +103,6 @@ public class ParallelSolrIndexer implements Runnable {
     File fileList = null;
     File outFile = null;
     private int monitoringInterval = 1;
-    private boolean isPreprocessing = false;
 
     public ParallelSolrIndexer() {
         // default constructor.
@@ -156,8 +154,6 @@ public class ParallelSolrIndexer implements Runnable {
                         }
                     }
                 }
-            } else if (arg.startsWith("-p")) {
-                e.setPreprocessing(true);
             } else if (arg.startsWith("-a")) {
                 e.setUseBothHashingAlgortihms(true);
             } else if (arg.startsWith("-l")) {
@@ -196,7 +192,6 @@ public class ParallelSolrIndexer implements Runnable {
                 "\n" +
                 "-n ... number of threads should be something your computer can cope with. default is 4.\n" +
                 "-f ... forces overwrite of outfile\n" +
-                "-p ... enables image processing before indexing (despeckle, trim white space). default is false.\n" +
                 "-a ... use both BitSampling and MetricSpaces.\n" +
                 "-l ... disables BitSampling and uses MetricSpaces instead.\n" +
                 "-y ... defines which feature classes are to be extracted. default is \"-y ph,cl,eh,jc\". \"-y ce,ac\" would \n" +
@@ -325,14 +320,6 @@ public class ParallelSolrIndexer implements Runnable {
         this.useBitSampling = !useMetricSpaces;
     }
 
-    public boolean isPreprocessing() {
-        return isPreprocessing;
-    }
-
-    public void setPreprocessing(boolean isPreprocessing) {
-        this.isPreprocessing = isPreprocessing;
-    }
-
     public boolean isForce() {
         return force;
     }
@@ -443,16 +430,8 @@ public class ParallelSolrIndexer implements Runnable {
 
                         // reads the image. Make sure twelve monkeys lib is in the path to read all jpegs and tiffs.
                         BufferedImage read = ImageIO.read(b);
-                        // --------< preprocessing >-------------------------
-//                        // converts color space to INT_RGB
-                        BufferedImage img = ImageUtils.createWorkingCopy(read);
-                        if (isPreprocessing) {
-//                            // despeckle
-//                            DespeckleFilter df = new DespeckleFilter();
-//                            img = df.filter(img, null);
-                            img = ImageUtils.trimWhiteSpace(img); // trims white space
-                        }
-                        // --------< / preprocessing >-------------------------
+                        // converts color space to INT_RGB
+                        BufferedImage img = ImageUtils.createWorkingCopy(read);                        
 
                         // --------< creating doc >-------------------------
                         sb.append("<doc>");
