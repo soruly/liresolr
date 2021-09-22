@@ -767,20 +767,20 @@ public class LireRequestHandler extends RequestHandlerBase {
 
     /**
      * Makes a Boolean query out of a list of hashes by ordering them ascending using their docFreq and
-     * then only using the most distinctive ones, defined by size in [0.1, 1], size=1 takes all.
+     * then only using the most distinctive ones, defined by size in [0, 1], size=1 takes all.
      *
      * @param hashes
      * @param paramField
-     * @param size       in [0.1, 1]
+     * @param size       in [0, 1]
      * @return
      */
     private BooleanQuery createQuery(int[] hashes, String paramField, double size) {
-        size = Math.max(0.1, Math.min(size, 1d)); // clamp size.
+        size = Math.max(0, Math.min(size, 1d)); // clamp size.
         List<String> hList = orderHashes(hashes, paramField, true);
         int numHashes = (int) Math.min(hList.size(), Math.floor(hashes.length * size));
-        // a minimum of 3 hashes ...
-        if (numHashes < 3) {
-            numHashes = 3;
+        // a minimum of 1 hashes ...
+        if (numHashes < 1) {
+            numHashes = 1;
         }
 
         BooleanQuery.Builder queryBuilder = new BooleanQuery.Builder();
