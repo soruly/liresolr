@@ -87,6 +87,8 @@ import org.apache.solr.search.DocList;
 import org.apache.solr.search.QParser;
 import org.apache.solr.search.SolrIndexSearcher;
 import org.apache.solr.search.SyntaxError;
+import org.apache.solr.common.util.ContentStream;
+import java.io.InputStream;
 
 import net.semanticmetadata.lire.imageanalysis.features.GlobalFeature;
 import net.semanticmetadata.lire.imageanalysis.features.global.ColorLayout;
@@ -161,8 +163,10 @@ public class LireRequestHandler extends RequestHandlerBase {
             handleIdSearch(req, rsp);
         } else if (req.getParams().get("extract") != null) { // we are trying to extract from an image URL.
             handleExtract(req, rsp);
-        } else { // lets return random results.
+        } else if (req.getParams().get("random") != null) { // lets return random results.
             handleRandomSearch(req, rsp);
+        } else { 
+            handleUploadSearch(req, rsp);
         }
     }
 
@@ -372,6 +376,82 @@ public class LireRequestHandler extends RequestHandlerBase {
         }
     }
 
+    /**
+     * Searches for an image given by HTTP POST. Note that (i) extracting image features takes time and
+     * (ii) not every image is readable by Java.
+     *
+     * @param req
+     * @param rsp
+     * @throws IOException
+     * @throws InstantiationException
+     * @throws IllegalAccessException
+     */
+    private void handleUploadSearch(SolrQueryRequest req, SolrQueryResponse rsp) throws IOException, InstantiationException, IllegalAccessException {
+        SolrParams params = req.getParams();
+        String paramUrl = params.get("url");
+        String paramField = req.getParams().get("field", "cl_ha");
+        if (!paramField.endsWith("_ha")) {
+            paramField += "_ha";
+        }
+        int paramRows = params.getInt("rows", defaultNumberOfResults);
+        numberOfQueryTerms = req.getParams().getDouble("accuracy", DEFAULT_NUMBER_OF_QUERY_TERMS);
+        numberOfCandidateResults = req.getParams().getInt("candidates", DEFAULT_NUMBER_OF_CANDIDATES);
+        useMetricSpaces = req.getParams().getBool("ms", DEFAULT_USE_METRIC_SPACES);
+
+        InputStream stream = null;
+        Iterable<ContentStream> streams = req.getContentStreams();
+        if (streams != null) {
+            Iterator<ContentStream> iter = streams.iterator();
+            if (iter.hasNext()) {
+                stream = iter.next().getStream();
+            }
+            if (iter.hasNext()) {
+                rsp.add("Error", "Does not support multiple ContentStreams");
+            }
+        }
+
+        GlobalFeature feat = null;
+        int[] hashes = null;
+        Query query = null;
+        // wrapping the whole part in the try
+        try {
+            BufferedImage img = ImageIO.read(stream);
+            stream.close();
+            img = ImageUtils.trimWhiteSpace(img);
+            // getting the right feature per field:
+            if (FeatureRegistry.getClassForHashField(paramField) == null) {
+                feat = new ColorLayout();
+            } else {
+                feat = (GlobalFeature) FeatureRegistry.getClassForHashField(paramField).newInstance();
+            }
+            feat.extract(img);
+
+            if (!useMetricSpaces) {
+                // Re-generating the hashes to save space (instead of storing them in the index)
+                HashTermStatistics.addToStatistics(req.getSearcher(), paramField);
+                hashes = BitSampling.generateHashes(feat.getFeatureVector());
+                query = createQuery(hashes, paramField, numberOfQueryTerms);
+            } else if (MetricSpaces.supportsFeature(feat)) {
+                // ----< Metric Spaces >-----
+                int queryLength = (int) StatsUtils.clamp(numberOfQueryTerms * MetricSpaces.getPostingListLength(feat), 3, MetricSpaces.getPostingListLength(feat));
+                String msQuery = MetricSpaces.generateBoostedQuery(feat, queryLength);
+                QueryParser qp = new QueryParser(paramField.replace("_ha", "_ms"), new WhitespaceAnalyzer());
+                query = qp.parse(msQuery);
+            } else {
+                rsp.add("Error", "Feature not supported by MetricSpaces: " + feat.getClass().getSimpleName());
+                query = new MatchAllDocsQuery();
+            }
+
+        } catch (Exception e) {
+            rsp.add("Error", "Error reading image from URL: " + paramUrl + ": " + e.getMessage());
+            e.printStackTrace();
+        }
+        // search if the feature has been extracted and query is there.
+        if (feat != null && query != null) {
+            doSearch(req, rsp, req.getSearcher(), paramField, paramRows, getFilterQueries(req), query, feat);
+        }
+    }
+    
     /**
      * Methods orders around the hashes already by docFreq removing those with docFreq == 0
      *
