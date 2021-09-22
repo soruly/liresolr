@@ -77,7 +77,6 @@ import java.util.concurrent.LinkedBlockingQueue;
  * <li> -p ... enables image processing before indexing (despeckle, trim white space)</li>
  * <li> -a ... use both BitSampling and MetricSpaces.</li>
  * <li> -l ... disables BitSampling and uses MetricSpaces instead.</li>
- * <li> -r ... defines a class implementing net.semanticmetadata.lire.solr.indexing.ImageDataProcessor that provides additional fields.</li>
  * </ul>
  * <p>
  * TODO: Make feature list change-able
@@ -108,7 +107,6 @@ public class ParallelSolrIndexer implements Runnable {
     private int monitoringInterval = 1;
     private int maxSideLength = 512;
     private boolean isPreprocessing = false;
-    private Class imageDataProcessor = null;
 
     public ParallelSolrIndexer() {
         // default constructor.
@@ -157,19 +155,6 @@ public class ParallelSolrIndexer implements Runnable {
                     } catch (NumberFormatException e1) {
                         e1.printStackTrace();
                         printHelp();
-                    }
-                } else printHelp();
-            } else if (arg.startsWith("-r")) {
-                // image data processor class.
-                if ((i + 1) < args.length) {
-                    try {
-                        Class<?> imageDataProcessorClass = Class.forName(args[i + 1]);
-                        if (imageDataProcessorClass.newInstance() instanceof ImageDataProcessor)
-                            e.setImageDataProcessor(imageDataProcessorClass);
-                    } catch (Exception e1) {
-                        System.err.println("Did not find imageProcessor class: " + e1.getMessage());
-                        printHelp();
-                        System.exit(0);
                     }
                 } else printHelp();
             } else if (arg.startsWith("-f") || arg.startsWith("--force")) {
@@ -229,8 +214,6 @@ public class ParallelSolrIndexer implements Runnable {
                 "-a ... use both BitSampling and MetricSpaces.\n" +
                 "-l ... disables BitSampling and uses MetricSpaces instead.\n" +
                 "-m ... maximum side length of images when indexed. All bigger files are scaled down. default is 512.\n" +
-                "-r ... defines a class implementing net.semanticmetadata.lire.solr.indexing.ImageDataProcessor\n" +
-                "       that provides additional fields.\n" +
                 "-y ... defines which feature classes are to be extracted. default is \"-y ph,cl,eh,jc\". \"-y ce,ac\" would \n" +
                 "       add to the other four features. ");
     }
@@ -271,10 +254,6 @@ public class ParallelSolrIndexer implements Runnable {
         this.outFile = outFile;
     }
 
-    public void setImageDataProcessor(Class imageDataProcessor) {
-        this.imageDataProcessor = imageDataProcessor;
-    }
-
     public int getMaxSideLength() {
         return maxSideLength;
     }
@@ -298,9 +277,6 @@ public class ParallelSolrIndexer implements Runnable {
         } else if (outFile.exists() && !force) {
             System.err.println(outFile.getName() + " already exists. Please delete or choose another outfile.");
             configured = false;
-        }
-        if (imageDataProcessor == null) {
-            imageDataProcessor = SimpleBackslashReplacer.class;
         }
         return configured;
     }
@@ -514,34 +490,17 @@ public class ParallelSolrIndexer implements Runnable {
                             img = ImageUtils.scaleImage(img, ((int) (scaleFactor * img.getWidth())), (int) (scaleFactor * img.getHeight()));
                         }
 
-                        ImageDataProcessor idp = null;
-                        try {
-                            if (imageDataProcessor != null) {
-                                idp = (ImageDataProcessor) imageDataProcessor.newInstance();
-                            }
-                        } catch (Exception e) {
-                            System.err.println("Could not instantiate ImageDataProcessor!");
-                            e.printStackTrace();
-                        }
                         // --------< creating doc >-------------------------
                         sb.append("<doc>");
                         sb.append("<field name=\"localimagefile\">");
                         sb.append(tmp.getFileName());
                         sb.append("</field>");
                         sb.append("<field name=\"id\">");
-                        if (idp == null)
-                            sb.append(tmp.getFileName());
-                        else
-                            sb.append(idp.getIdentifier(tmp.getFileName()));
+                        sb.append(tmp.getFileName());
                         sb.append("</field>");
                         sb.append("<field name=\"title\">");
-                        if (idp == null)
-                            sb.append(tmp.getFileName());
-                        else
-                            sb.append(idp.getTitle(tmp.getFileName()));
+                        sb.append(tmp.getFileName());
                         sb.append("</field>");
-                        if (idp != null)
-                            sb.append(idp.getAdditionalFields(tmp.getFileName()));
 
                         for (GlobalFeature feature : features) {
                             String featureCode = FeatureRegistry.getCodeForClass(feature.getClass());
