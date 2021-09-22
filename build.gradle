@@ -17,15 +17,15 @@ repositories {
 
 dependencies {
     // ---< Lucene >---
-    implementation 'org.apache.lucene:lucene-core:7.5.0'
-    implementation 'org.apache.lucene:lucene-analyzers-common:7.5.0'
-    implementation 'org.apache.lucene:lucene-queryparser:7.5.0'
-    implementation 'org.apache.lucene:lucene-queries:7.5.0'
+    implementation 'org.apache.lucene:lucene-core:8.9.0'
+    implementation 'org.apache.lucene:lucene-analyzers-common:8.9.0'
+    implementation 'org.apache.lucene:lucene-queryparser:8.9.0'
+    implementation 'org.apache.lucene:lucene-queries:8.9.0'
 
     // ---< Solr >---
-    implementation 'org.apache.solr:solr-core:7.5.0'
-    implementation 'org.apache.solr:solr-dataimporthandler:7.5.0'
-    implementation 'org.apache.solr:solr-solrj:7.5.0'
+    implementation 'org.apache.solr:solr-core:8.9.0'
+    implementation 'org.apache.solr:solr-dataimporthandler:8.9.0'
+    implementation 'org.apache.solr:solr-solrj:8.9.0'
 
     // ---< Commons >---
     implementation 'commons-io:commons-io:2.6'
@@ -126,7 +126,7 @@ task createFlickrDownloader(type: Jar, dependsOn: build) {
 
 task runParallelIndexer(type: JavaExec) {
     classpath = sourceSets.main.runtimeClasspath
-    main = 'net.semanticmetadata.lire.solr.indexing.ParallelSolrIndexer'
+    mainClass = 'net.semanticmetadata.lire.solr.indexing.ParallelSolrIndexer'
 
     // arguments to pass to the application
     args('-i images-wipo.lst -f -o images-wipo.xml -n 4'.split(' '))
@@ -142,7 +142,7 @@ task runParallelIndexer(type: JavaExec) {
 
 task runImportFromCSV(type: JavaExec) {
     classpath = sourceSets.main.runtimeClasspath
-    main = 'net.semanticmetadata.lire.solr.indexing.ImportFromCSV'
+    mainClass = 'net.semanticmetadata.lire.solr.indexing.ImportFromCSV'
 
     // run this with 
     // $> gradle runImportFromCSV --args='-i in.csv -o out.xml'
@@ -150,7 +150,7 @@ task runImportFromCSV(type: JavaExec) {
 
 task runFlickrDownloader(type: JavaExec) {
     classpath = sourceSets.main.runtimeClasspath
-    main = 'net.semanticmetadata.lire.solr.tools.FlickrSolrIndexingTool'
+    mainClass = 'net.semanticmetadata.lire.solr.tools.FlickrSolrIndexingTool'
 
     // arguments to pass to the application
     args('-o auto -n 20'.split(' '))
