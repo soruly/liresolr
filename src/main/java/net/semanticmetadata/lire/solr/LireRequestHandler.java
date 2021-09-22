@@ -340,6 +340,7 @@ public class LireRequestHandler extends RequestHandlerBase {
         Query query = null;
         // wrapping the whole part in the try
         try {
+            ImageIO.setUseCache(false);
             BufferedImage img = ImageIO.read(new URL(paramUrl).openStream());
             // getting the right feature per field:
             if (FeatureRegistry.getClassForHashField(paramField) == null) {
@@ -414,6 +415,7 @@ public class LireRequestHandler extends RequestHandlerBase {
         Query query = null;
         // wrapping the whole part in the try
         try {
+            ImageIO.setUseCache(false);
             BufferedImage img = ImageIO.read(stream);
             stream.close();
             // getting the right feature per field:
@@ -472,6 +474,7 @@ public class LireRequestHandler extends RequestHandlerBase {
         // wrapping the whole part in the try
         try {
             if (!paramField.startsWith("sf")) {
+                ImageIO.setUseCache(false);
                 BufferedImage img = ImageIO.read(new URL(paramUrl).openStream());
                 // getting the right feature per field:
                 if (FeatureRegistry.getClassForHashField(paramField) == null) {
