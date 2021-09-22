@@ -107,7 +107,7 @@ public class ParallelSolrIndexer implements Runnable {
     File outFile = null;
     private int monitoringInterval = 10;
     private int maxSideLength = 512;
-    private boolean isPreprocessing = true;
+    private boolean isPreprocessing = false;
     private Class imageDataProcessor = null;
 
     public ParallelSolrIndexer() {
@@ -225,7 +225,7 @@ public class ParallelSolrIndexer implements Runnable {
                 "\n" +
                 "-n ... number of threads should be something your computer can cope with. default is 4.\n" +
                 "-f ... forces overwrite of outfile\n" +
-                "-p ... enables image processing before indexing (despeckle, trim white space)\n" +
+                "-p ... enables image processing before indexing (despeckle, trim white space). default is false.\n" +
                 "-a ... use both BitSampling and MetricSpaces.\n" +
                 "-l ... disables BitSampling and uses MetricSpaces instead.\n" +
                 "-m ... maximum side length of images when indexed. All bigger files are scaled down. default is 512.\n" +
@@ -493,12 +493,12 @@ public class ParallelSolrIndexer implements Runnable {
                         // --------< preprocessing >-------------------------
 //                        // converts color space to INT_RGB
                         BufferedImage img = ImageUtils.createWorkingCopy(read);
-//                        if (isPreprocessing) {
+                        if (isPreprocessing) {
 //                            // despeckle
 //                            DespeckleFilter df = new DespeckleFilter();
 //                            img = df.filter(img, null);
                             img = ImageUtils.trimWhiteSpace(img); // trims white space
-//                        }
+                        }
                         // --------< / preprocessing >-------------------------
 
                         if (maxSideLength > 50)
