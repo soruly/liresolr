@@ -341,7 +341,6 @@ public class LireRequestHandler extends RequestHandlerBase {
         // wrapping the whole part in the try
         try {
             BufferedImage img = ImageIO.read(new URL(paramUrl).openStream());
-            img = ImageUtils.trimWhiteSpace(img);
             // getting the right feature per field:
             if (FeatureRegistry.getClassForHashField(paramField) == null) {
                 feat = new ColorLayout();
@@ -417,7 +416,6 @@ public class LireRequestHandler extends RequestHandlerBase {
         try {
             BufferedImage img = ImageIO.read(stream);
             stream.close();
-            img = ImageUtils.trimWhiteSpace(img);
             // getting the right feature per field:
             if (FeatureRegistry.getClassForHashField(paramField) == null) {
                 feat = new ColorLayout();
@@ -475,7 +473,6 @@ public class LireRequestHandler extends RequestHandlerBase {
         try {
             if (!paramField.startsWith("sf")) {
                 BufferedImage img = ImageIO.read(new URL(paramUrl).openStream());
-                img = ImageUtils.trimWhiteSpace(img);
                 // getting the right feature per field:
                 if (FeatureRegistry.getClassForHashField(paramField) == null) {
                     feat = new ColorLayout();
