@@ -4,60 +4,48 @@ This is the GRADLE build file for LIRE.
 apply plugin: 'java'
 apply plugin: 'project-report'
 
-sourceCompatibility = 1.8
+sourceCompatibility = 11
 version = project.property('versionString') + '_build' + project.property('buildNumber')
-
-def solrVersion = '7.5.0'
 
 repositories {
     mavenLocal()
     mavenCentral()
     maven {
-        url 'http://maven.restlet.org'
+        url 'https://maven.restlet.org'
     }
 }
 
 dependencies {
     // ---< Lucene >---
-    compile group: 'org.apache.lucene', name: 'lucene-core', version: solrVersion
-    compile group: 'org.apache.lucene', name: 'lucene-analyzers-common', version: solrVersion
-    compile group: 'org.apache.lucene', name: 'lucene-queryparser', version: solrVersion
-    compile group: 'org.apache.lucene', name: 'lucene-queries', version: solrVersion
+    implementation 'org.apache.lucene:lucene-core:7.5.0'
+    implementation 'org.apache.lucene:lucene-analyzers-common:7.5.0'
+    implementation 'org.apache.lucene:lucene-queryparser:7.5.0'
+    implementation 'org.apache.lucene:lucene-queries:7.5.0'
 
     // ---< Solr >---
-    // https://mvnrepository.com/artifact/org.apache.solr/solr-core
-    compile group: 'org.apache.solr', name: 'solr-core', version: solrVersion
-    // https://mvnrepository.com/artifact/org.apache.solr/solr-dataimporthandler
-    compile group: 'org.apache.solr', name: 'solr-dataimporthandler', version: solrVersion
-    compile group: 'org.apache.solr', name: 'solr-solrj', version: solrVersion
-    // https://mvnrepository.com/artifact/org.apache.solr/solr-solrj
+    implementation 'org.apache.solr:solr-core:7.5.0'
+    implementation 'org.apache.solr:solr-dataimporthandler:7.5.0'
+    implementation 'org.apache.solr:solr-solrj:7.5.0'
 
     // ---< Commons >---
-    compile group: 'commons-io', name: 'commons-io', version: '2.6'
-    compile group: 'org.apache.commons', name: 'commons-math3', version: '3.6.1'
-    // https://mvnrepository.com/artifact/commons-codec/commons-codec
-    compile group: 'commons-codec', name: 'commons-codec', version: '1.11'
-    // https://mvnrepository.com/artifact/commons-cli/commons-cli
-    compile group: 'commons-cli', name: 'commons-cli', version: '1.4'
-    // https://mvnrepository.com/artifact/com.sangupta/jopensurf
-    compile group: 'com.sangupta', name: 'jopensurf', version: '1.0.0'
-    // https://mvnrepository.com/artifact/org.bytedeco.javacpp-presets/opencv
-    // compile group: 'org.bytedeco.javacpp-presets', name: 'opencv', version: '2.4.11-0.11'
+    implementation 'commons-io:commons-io:2.6'
+    implementation 'org.apache.commons:commons-math3:3.6.1'
+    implementation 'commons-codec:commons-codec:1.11'
+    implementation 'commons-cli:commons-cli:1.4'
+    implementation 'com.sangupta:jopensurf:1.0.0'
 
     // ---< Helper files >---
-    // https://mvnrepository.com/artifact/com.twelvemonkeys.imageio/imageio-jpeg
-    compile group: 'com.twelvemonkeys.imageio', name: 'imageio-jpeg', version: '3.4.1'
+    implementation 'com.twelvemonkeys.imageio:imageio-jpeg:3.4.1'
 
     // ---< Dom4j & Jaxen for XPath because StaX is often too complicated >---
-    compile 'org.dom4j:dom4j:2.1.1'
-    compile 'jaxen:jaxen:1.1.6'
+    implementation 'org.dom4j:dom4j:2.1.1'
+    implementation 'jaxen:jaxen:1.1.6'
 
     // ---< Current version of LIRE >---
-    compile fileTree(dir: 'lib', include: '*.jar')
-    runtime fileTree(dir: 'lib', include: '*.jar')
+    implementation fileTree(dir: 'lib', include: '*.jar')
 
     // https://mvnrepository.com/artifact/junit/junit
-    testCompile group: 'junit', name: 'junit', version: '4.12'
+    testImplementation group: 'junit', name: 'junit', version: '4.12'
 
 }
 
@@ -75,23 +63,19 @@ jar {
 
     props.store(propsFile.newWriter(), null)
 
-    archiveName = baseName+'-'+props.getProperty('versionString')+'.'+extension
-
     manifest {
         attributes 'Implementation-Title': 'LireSolr',
                 'Implementation-Version': props.getProperty('versionString') + ' build' + nextbuildnum.toString() + ' date' + formattedDate.toString()
     }
 }
 
-
 /**
  * Deploys the results from the jar task to Solr.
  */
 task distForSolr(type: Copy, dependsOn: jar) {
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
     delete './dist'
     String path = './dist'
-    // change the path variable to copy it to your Solr installation directory ...
-    // String path = '../../Applications/solr-7.5.0/server/solr-webapp/webapp/WEB-INF/lib'
     String lsJar = 'liresolr.jar'
     String liJar = 'lire.jar'
     delete path + lsJar
@@ -126,8 +110,8 @@ task prepareForDockerImage(type: Copy, dependsOn: distForSolr) {
 }
 
 task createFlickrDownloader(type: Jar, dependsOn: build) {
-    archiveName = 'flickrdownloader.jar'
-    destinationDir = project.getRootDir()
+    archiveFileName = 'flickrdownloader.jar'
+    destinationDirectory = project.getRootDir()
 
     from { Project.DEFAULT_BUILD_DIR_NAME + "/classes/main" }
     from { zipTree("lib/LIRE-1.0_b05.jar") }
