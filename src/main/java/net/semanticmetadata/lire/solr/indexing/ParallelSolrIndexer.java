@@ -113,10 +113,6 @@ public class ParallelSolrIndexer implements Runnable {
     public ParallelSolrIndexer() {
         // default constructor.
         listOfFeatures = new HashSet<Class>();
-        listOfFeatures.add(PHOG.class);
-        listOfFeatures.add(ColorLayout.class);
-        listOfFeatures.add(EdgeHistogram.class);
-        listOfFeatures.add(JCD.class);
 
         HashingMetricSpacesManager.init(); // load reference points from disk.
 
