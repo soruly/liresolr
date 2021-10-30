@@ -23,7 +23,7 @@ Run the docker. This would create solr core and start the server.
 
 ```bash
 docker run -d -p 8983:8983 \
-  -v /var/mycores:/opt/solr/server/solr/mycores \
+  -v /var/mycores:/var/solr \
    ghcr.io/soruly/liresolr:latest solr-precreate mycore \
    /opt/solr/server/solr/configsets/liresolr
 ```
