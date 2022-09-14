@@ -468,6 +468,7 @@ public class LireRequestHandler extends RequestHandlerBase {
         if (!paramField.endsWith("_ha")) {
             paramField += "_ha";
         }
+        Boolean useOrderHashes = req.getParams().getBool("oh", true);
         useMetricSpaces = req.getParams().getBool("ms", DEFAULT_USE_METRIC_SPACES);
         double accuracy = req.getParams().getDouble("accuracy", DEFAULT_NUMBER_OF_QUERY_TERMS);
         GlobalFeature feat;
@@ -499,11 +500,18 @@ public class LireRequestHandler extends RequestHandlerBase {
             if (!useMetricSpaces || true) { // select the most distinguishing hashes and deliver them back.
                 HashTermStatistics.addToStatistics(req.getSearcher(), paramField);
                 int[] hashes = BitSampling.generateHashes(feat.getFeatureVector());
-                List<String> hashStrings = orderHashes(hashes, paramField, false);
-                rsp.add("bs_list", hashStrings);
-                List<String> hashQuery = orderHashes(hashes, paramField, true);
+                List<String> hashStrings;
+                List<String> hashQuery;
+                if (useOrderHashes) {
+                    hashStrings = orderHashes(hashes, paramField, false);
+                    hashQuery = orderHashes(hashes, paramField, true);
+                } else {
+                    hashStrings = arrayToListString(hashes);
+                    hashQuery = arrayToListString(hashes);
+                }
                 int queryLength = (int) StatsUtils.clamp(accuracy * hashes.length,
-                        3, hashQuery.size());
+                3, hashQuery.size());
+                rsp.add("bs_list", hashStrings);
                 rsp.add("bs_query", String.join(" ", hashQuery.subList(0, queryLength)));
             }
             if (MetricSpaces.supportsFeature(feat)) {
@@ -792,6 +800,21 @@ public class LireRequestHandler extends RequestHandlerBase {
         //queryBuilder.add(new BooleanClause(new MatchAllDocsQuery(), BooleanClause.Occur.SHOULD));
         BooleanQuery query = queryBuilder.build();
         return query;
+    }
+
+    /**
+     * Convert int hashes to a string list
+     *
+     * @param hashes                 the int[] of hashes
+     * @return
+     */
+    private List<String> arrayToListString(int[] hashes) {
+        List<String> hList = new ArrayList<>(hashes.length);
+        // creates a list of terms.
+        for (int hashe : hashes) {
+            hList.add(Integer.toHexString(hashe));
+        }
+        return hList;
     }
 
     /**
