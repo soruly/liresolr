@@ -1,7 +1,7 @@
 # liresolr
 
 [![License](https://img.shields.io/github/license/soruly/liresolr.svg?style=flat-square)](https://github.com/soruly/liresolr/blob/master/LICENSE)
-[![GitHub Workflow Status](https://img.shields.io/github/workflow/status/soruly/liresolr/Docker%20Image%20CI?style=flat-square)](https://github.com/soruly/liresolr/actions)
+[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/soruly/liresolr/docker-image.yml?style=flat-square)](https://github.com/soruly/liresolr/actions)
 [![Docker](https://img.shields.io/docker/pulls/soruly/liresolr?style=flat-square)](https://hub.docker.com/r/soruly/liresolr)
 [![Docker Image Size](https://img.shields.io/docker/image-size/soruly/liresolr/latest?style=flat-square)](https://hub.docker.com/r/soruly/liresolr)
 [![Discord](https://img.shields.io/discord/437578425767559188.svg?style=flat-square)](https://discord.gg/K9jn6Kj)
