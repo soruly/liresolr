@@ -17,15 +17,15 @@ repositories {
 
 dependencies {
     // ---< Lucene >---
-    implementation 'org.apache.lucene:lucene-core:8.11.2'
-    implementation 'org.apache.lucene:lucene-analyzers-common:8.11.2'
-    implementation 'org.apache.lucene:lucene-queryparser:8.11.2'
-    implementation 'org.apache.lucene:lucene-queries:8.11.2'
+    implementation 'org.apache.lucene:lucene-core:8.11.3'
+    implementation 'org.apache.lucene:lucene-analyzers-common:8.11.3'
+    implementation 'org.apache.lucene:lucene-queryparser:8.11.3'
+    implementation 'org.apache.lucene:lucene-queries:8.11.3'
 
     // ---< Solr >---
-    implementation 'org.apache.solr:solr-core:8.11.2'
-    implementation 'org.apache.solr:solr-dataimporthandler:8.11.2'
-    implementation 'org.apache.solr:solr-solrj:8.11.2'
+    implementation 'org.apache.solr:solr-core:8.11.3'
+    implementation 'org.apache.solr:solr-dataimporthandler:8.11.3'
+    implementation 'org.apache.solr:solr-solrj:8.11.3'
 
     // ---< Commons >---
     implementation 'commons-io:commons-io:2.6'
