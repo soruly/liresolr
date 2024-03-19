@@ -4,7 +4,6 @@ This is the GRADLE build file for LIRE.
 apply plugin: 'java'
 apply plugin: 'project-report'
 
-sourceCompatibility = 11
 version = project.property('versionString') + '_build' + project.property('buildNumber')
 
 repositories {
