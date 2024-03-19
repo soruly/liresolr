@@ -103,7 +103,7 @@ import java.util.TreeSet;
 
 public class LireRequestHandler extends RequestHandlerBase {
     private long time = 0;
-    private final int defaultNumberOfResults = 60;
+    private int defaultNumberOfResults = 60;
     /**
      * number of candidate results retrieved from the index. The higher this number, the slower,
      * the but more accurate the retrieval will be. 10k is a good value for starters.
@@ -193,8 +193,7 @@ public class LireRequestHandler extends RequestHandlerBase {
             rsp.add("QueryField", paramField);
             rsp.add("QueryFeature", queryFeature.getClass().getName());
             if (queryDocId > -1) {
-                // Using DocValues to get the actual data from the index.
-//              BinaryDocValues binaryValues = MultiDocValues.getBinaryValues(searcher.getIndexReader(), FeatureRegistry.getFeatureFieldName(paramField));
+
                 BinaryDocValues binaryValues = new RandomAccessBinaryDocValues(() -> {
                     try {
                         return MultiDocValues.getBinaryValues(searcher.getIndexReader(), FeatureRegistry.getFeatureFieldName(paramField));
@@ -215,22 +214,7 @@ public class LireRequestHandler extends RequestHandlerBase {
                     query = new MatchAllDocsQuery();
                     rsp.add("Note", "Switching to AllDocumentsQuery because accuracy is set higher than 0.9.");
                 } else {
-                    if (!useMetricSpaces) {
-                        // check singleton cache if the term stats can be cached.
-                        HashTermStatistics.addToStatistics(searcher, paramField);
-                        // Re-generating the hashes to save space (instead of storing them in the index)
-                        int[] hashes = BitSampling.generateHashes(queryFeature.getFeatureVector());
-                        query = createQuery(hashes, paramField, numberOfQueryTerms);
-                    } else if (MetricSpaces.supportsFeature(queryFeature)) {
-                        // ----< Metric Spaces >-----
-                        int queryLength = (int) StatsUtils.clamp(numberOfQueryTerms * MetricSpaces.getPostingListLength(queryFeature), 3, MetricSpaces.getPostingListLength(queryFeature));
-                        String msQuery = MetricSpaces.generateBoostedQuery(queryFeature, queryLength);
-                        QueryParser qp = new QueryParser(paramField.replace("_ha", "_ms"), new WhitespaceAnalyzer());
-                        query = qp.parse(msQuery);
-                    } else {
-                        query = new MatchAllDocsQuery();
-                        rsp.add("Error", "Feature not supported by MetricSpaces: " + queryFeature.getClass().getSimpleName());
-                    }
+                    query = getQuery(paramField, queryFeature, req, rsp);
                 }
                 doSearch(req, rsp, searcher, paramField, paramRows, getFilterQueries(req), query, queryFeature);
             } else {
@@ -326,37 +310,14 @@ public class LireRequestHandler extends RequestHandlerBase {
         numberOfCandidateResults = req.getParams().getInt("candidates", DEFAULT_NUMBER_OF_CANDIDATES);
         useMetricSpaces = req.getParams().getBool("ms", DEFAULT_USE_METRIC_SPACES);
 
-
         GlobalFeature feat = null;
-        int[] hashes = null;
         Query query = null;
         // wrapping the whole part in the try
         try {
             ImageIO.setUseCache(false);
             BufferedImage img = ImageIO.read(new URL(paramUrl).openStream());
-            // getting the right feature per field:
-            if (FeatureRegistry.getClassForHashField(paramField) == null) {
-                feat = new ColorLayout();
-            } else {
-                feat = (GlobalFeature) FeatureRegistry.getClassForHashField(paramField).newInstance();
-            }
-            feat.extract(img);
-
-            if (!useMetricSpaces) {
-                // Re-generating the hashes to save space (instead of storing them in the index)
-                HashTermStatistics.addToStatistics(req.getSearcher(), paramField);
-                hashes = BitSampling.generateHashes(feat.getFeatureVector());
-                query = createQuery(hashes, paramField, numberOfQueryTerms);
-            } else if (MetricSpaces.supportsFeature(feat)) {
-                // ----< Metric Spaces >-----
-                int queryLength = (int) StatsUtils.clamp(numberOfQueryTerms * MetricSpaces.getPostingListLength(feat), 3, MetricSpaces.getPostingListLength(feat));
-                String msQuery = MetricSpaces.generateBoostedQuery(feat, queryLength);
-                QueryParser qp = new QueryParser(paramField.replace("_ha", "_ms"), new WhitespaceAnalyzer());
-                query = qp.parse(msQuery);
-            } else {
-                rsp.add("Error", "Feature not supported by MetricSpaces: " + feat.getClass().getSimpleName());
-                query = new MatchAllDocsQuery();
-            }
+            feat = extractImageFeatures(paramField, img);
+            query = getQuery(paramField, feat, req, rsp);
 
         } catch (Exception e) {
             rsp.add("Error", "Error reading image from URL: " + paramUrl + ": " + e.getMessage());
@@ -403,36 +364,14 @@ public class LireRequestHandler extends RequestHandlerBase {
         }
 
         GlobalFeature feat = null;
-        int[] hashes = null;
         Query query = null;
         // wrapping the whole part in the try
         try {
             ImageIO.setUseCache(false);
             BufferedImage img = ImageIO.read(stream);
             stream.close();
-            // getting the right feature per field:
-            if (FeatureRegistry.getClassForHashField(paramField) == null) {
-                feat = new ColorLayout();
-            } else {
-                feat = (GlobalFeature) FeatureRegistry.getClassForHashField(paramField).newInstance();
-            }
-            feat.extract(img);
-
-            if (!useMetricSpaces) {
-                // Re-generating the hashes to save space (instead of storing them in the index)
-                HashTermStatistics.addToStatistics(req.getSearcher(), paramField);
-                hashes = BitSampling.generateHashes(feat.getFeatureVector());
-                query = createQuery(hashes, paramField, numberOfQueryTerms);
-            } else if (MetricSpaces.supportsFeature(feat)) {
-                // ----< Metric Spaces >-----
-                int queryLength = (int) StatsUtils.clamp(numberOfQueryTerms * MetricSpaces.getPostingListLength(feat), 3, MetricSpaces.getPostingListLength(feat));
-                String msQuery = MetricSpaces.generateBoostedQuery(feat, queryLength);
-                QueryParser qp = new QueryParser(paramField.replace("_ha", "_ms"), new WhitespaceAnalyzer());
-                query = qp.parse(msQuery);
-            } else {
-                rsp.add("Error", "Feature not supported by MetricSpaces: " + feat.getClass().getSimpleName());
-                query = new MatchAllDocsQuery();
-            }
+            feat = extractImageFeatures(paramField, img);
+            query = getQuery(paramField, feat, req, rsp);
 
         } catch (Exception e) {
             rsp.add("Error", "Error reading image from URL: " + paramUrl + ": " + e.getMessage());
@@ -469,13 +408,7 @@ public class LireRequestHandler extends RequestHandlerBase {
             if (!paramField.startsWith("sf")) {
                 ImageIO.setUseCache(false);
                 BufferedImage img = ImageIO.read(new URL(paramUrl).openStream());
-                // getting the right feature per field:
-                if (FeatureRegistry.getClassForHashField(paramField) == null) {
-                    feat = new ColorLayout();
-                } else {
-                    feat = (GlobalFeature) FeatureRegistry.getClassForHashField(paramField).newInstance();
-                }
-                feat.extract(img);
+                feat = extractImageFeatures(paramField, img);
             } else {
                 // we assume that this is a generic short feature, like it is used in context of deep features.
                 feat = new ShortFeatureCosineDistance();
@@ -489,7 +422,7 @@ public class LireRequestHandler extends RequestHandlerBase {
                 ((ShortFeatureCosineDistance) feat).setData(featureShort);
             }
             rsp.add("histogram", Base64.encodeBase64String(feat.getByteArrayRepresentation()));
-            if (true) { // select the most distinguishing hashes and deliver them back.
+            if (!useMetricSpaces || true) { // select the most distinguishing hashes and deliver them back.
                 HashTermStatistics.addToStatistics(req.getSearcher(), paramField);
                 int[] hashes = BitSampling.generateHashes(feat.getFeatureVector());
                 List<String> hashStrings;
@@ -820,5 +753,40 @@ public class LireRequestHandler extends RequestHandlerBase {
             return bdv.binaryValue();
         }
         return new BytesRef(BytesRef.EMPTY_BYTES);
+    }
+
+    private GlobalFeature extractImageFeatures(String paramField, BufferedImage img) throws InstantiationException, IllegalAccessException {
+        GlobalFeature feat;
+
+        if (FeatureRegistry.getClassForHashField(paramField) == null) {
+            feat = new ColorLayout();
+        } else {
+            feat = (GlobalFeature) FeatureRegistry.getClassForHashField(paramField).newInstance();
+        }
+
+        feat.extract(img);
+        return feat;
+    }
+
+    private Query getQuery(String paramField, GlobalFeature feat, SolrQueryRequest req, SolrQueryResponse rsp) throws IOException, ParseException {
+        Query query;
+
+        if (!useMetricSpaces) {
+            // Re-generating the hashes to save space (instead of storing them in the index)
+            HashTermStatistics.addToStatistics(req.getSearcher(), paramField);
+            int[] hashes = BitSampling.generateHashes(feat.getFeatureVector());
+            query = createQuery(hashes, paramField, numberOfQueryTerms);
+        } else if (MetricSpaces.supportsFeature(feat)) {
+            // ----< Metric Spaces >-----
+            int queryLength = (int) StatsUtils.clamp(numberOfQueryTerms * MetricSpaces.getPostingListLength(feat), 3, MetricSpaces.getPostingListLength(feat));
+            String msQuery = MetricSpaces.generateBoostedQuery(feat, queryLength);
+            QueryParser qp = new QueryParser(paramField.replace("_ha", "_ms"), new WhitespaceAnalyzer());
+            query = qp.parse(msQuery);
+        } else {
+            rsp.add("Error", "Feature not supported by MetricSpaces: " + feat.getClass().getSimpleName());
+            query = new MatchAllDocsQuery();
+        }
+
+        return query;
     }
 }
