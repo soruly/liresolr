@@ -86,11 +86,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.StringTokenizer;
 import java.util.TreeSet;
 
@@ -391,7 +393,7 @@ public class LireRequestHandler extends RequestHandlerBase {
                     hashStrings = arrayToListString(hashes);
                     hashQuery = arrayToListString(hashes);
                 }
-                int queryLength = (int) StatsUtils.clamp(accuracy * hashes.length,3, hashQuery.size());
+                int queryLength = (int) StatsUtils.clamp(accuracy * hashes.length, 3, hashQuery.size());
                 rsp.add("bs_list", hashStrings);
                 rsp.add("bs_query", String.join(" ", hashQuery.subList(0, queryLength)));
             }
@@ -535,7 +537,7 @@ public class LireRequestHandler extends RequestHandlerBase {
 
         SolrDocumentList list = new SolrDocumentList();
         for (CachingSimpleResult result : resultScoreDocs) {
-            HashMap m = new HashMap(2);
+            Map<String, Object> m = new HashMap<>(2);
             m.put("d", result.getDistance());
             // add fields as requested:
             if (req.getParams().get("fl") == null) {
@@ -681,17 +683,16 @@ public class LireRequestHandler extends RequestHandlerBase {
      * @return
      */
     private List<String> orderHashes(int[] hashes, String paramField, boolean removeZeroDocFreqTerms) {
-        List<String> hList = new ArrayList<>(hashes.length);
-        // creates a list of terms.
-        for (int hashe : hashes) {
-            hList.add(Integer.toHexString(hashe));
-        }
-        // uses our predetermined hash term stats object to sort the list
-        Collections.sort(hList, (o1, o2) -> HashTermStatistics.docFreq(paramField, o1) - HashTermStatistics.docFreq(paramField, o2));
+        var hList = Arrays.stream(hashes)
+                .mapToObj(Integer::toHexString)
+                .sorted(Comparator.comparingInt(o -> HashTermStatistics.docFreq(paramField, o)))
+                .toList();
+
         // removing those with zero entries but leaving at least three.
-        while (HashTermStatistics.docFreq(paramField, hList.get(0)) < 1 && hList.size() > 3) {
-            hList.remove(0);
+        while (HashTermStatistics.docFreq(paramField, hList.getFirst()) < 1 && hList.size() > 3) {
+            hList.removeFirst();
         }
+
         return hList;
     }
 
