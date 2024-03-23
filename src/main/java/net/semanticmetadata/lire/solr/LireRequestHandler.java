@@ -317,25 +317,14 @@ public class LireRequestHandler extends RequestHandlerBase {
         numberOfCandidateResults = parameters.numberOfCandidateResults;
         useMetricSpaces = parameters.useMetricSpaces;
 
-        InputStream stream = null;
-        Iterable<ContentStream> streams = req.getContentStreams();
-        if (streams != null) {
-            Iterator<ContentStream> iter = streams.iterator();
-            if (iter.hasNext()) {
-                stream = iter.next().getStream();
-            }
-            if (iter.hasNext()) {
-                rsp.add("Error", "Does not support multiple ContentStreams");
-            }
-        }
+        System.out.println("Upload search: " + parameters);
 
         GlobalFeature feat = null;
         Query query = null;
         // wrapping the whole part in the try
         try {
             ImageIO.setUseCache(false);
-            BufferedImage img = ImageIO.read(stream);
-            stream.close();
+            BufferedImage img = readImageFromStream(req, rsp);
             feat = extractImageFeatures(parameters.field, img);
             query = getQuery(parameters.field, feat, req, rsp);
 
@@ -737,5 +726,22 @@ public class LireRequestHandler extends RequestHandlerBase {
         }
 
         return query;
+    }
+
+    private static BufferedImage readImageFromStream(SolrQueryRequest req, SolrQueryResponse rsp) throws IOException {
+        InputStream stream = null;
+        Iterable<ContentStream> streams = req.getContentStreams();
+        if (streams != null) {
+            Iterator<ContentStream> iter = streams.iterator();
+            if (iter.hasNext()) {
+                stream = iter.next().getStream();
+            }
+            if (iter.hasNext()) {
+                rsp.add("Error", "Does not support multiple ContentStreams");
+            }
+        }
+        BufferedImage img = ImageIO.read(stream);
+        stream.close();
+        return img;
     }
 }
