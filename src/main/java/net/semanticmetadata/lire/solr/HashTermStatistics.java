@@ -7,29 +7,26 @@ import org.apache.solr.search.SolrIndexSearcher;
 
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Used to hold the hashing terms in memory.
  * Created by mlux on 08.12.2016.
  */
 public class HashTermStatistics {
-    private static HashTermStatistics instance = new HashTermStatistics();
-    private static HashMap<String, HashMap<String, Integer>> termstats = new HashMap<>(8);
 
-    public static HashTermStatistics getInstance() {
-        return instance;
-    }
+    private static final HashMap<String, Map<String, Integer>> TERM_STATS = new HashMap<>(8);
+
 
     public static void addToStatistics(SolrIndexSearcher searcher, String field) throws IOException {
-        // check if this field is already in the stats.
-//        synchronized (instance) {
-            if (termstats.get(field)!=null) return;
-//        }
-        // else add it to the stats.
+        if (TERM_STATS.containsKey(field)) {
+            return;
+        }
+
         Terms terms = searcher.getSlowAtomicReader().terms(field);
-        HashMap<String, Integer> term2docFreq = new HashMap<String, Integer>(1000);
-        termstats.put(field, term2docFreq);
-        if (terms!=null) {
+        Map<String, Integer> term2docFreq = new HashMap<>(1000);
+        TERM_STATS.put(field, term2docFreq);
+        if (terms != null) {
             TermsEnum termsEnum = terms.iterator();
             BytesRef term;
             while ((term = termsEnum.next()) != null) {
@@ -39,10 +36,8 @@ public class HashTermStatistics {
     }
 
     public static int docFreq(String field, String term) {
-        if (termstats.get(field).get(term)!=null)
-            return termstats.get(field).get(term);
-        else
-            return 0;
+        Integer termValue = TERM_STATS.get(field).get(term);
+        return termValue != null ? termValue : 0;
     }
 
 }

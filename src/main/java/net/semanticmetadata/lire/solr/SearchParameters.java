@@ -10,8 +10,6 @@ public class SearchParameters {
     private static final int DEFAULT_NUMBER_OF_CANDIDATES = 10000;
     private static final boolean DEFAULT_USE_METRIC_SPACES = false;
 
-
-
     public final String id;
     public final String url;
     public final String field;
@@ -39,5 +37,18 @@ public class SearchParameters {
         }
 
         return field;
+    }
+
+    @Override
+    public String toString() {
+        return "SearchParameters{" +
+                "id='" + id + '\'' +
+                ", url='" + url + '\'' +
+                ", field='" + field + '\'' +
+                ", rows=" + rows +
+                ", numberOfQueryTerms=" + numberOfQueryTerms +
+                ", numberOfCandidateResults=" + numberOfCandidateResults +
+                ", useMetricSpaces=" + useMetricSpaces +
+                '}';
     }
 }
