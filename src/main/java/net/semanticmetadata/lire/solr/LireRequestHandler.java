@@ -530,51 +530,51 @@ public class LireRequestHandler extends RequestHandlerBase {
     private static SolrDocumentList getResults(SolrQueryRequest req, TreeSet<CachingSimpleResult> resultScoreDocs) {
         SolrDocumentList list = new SolrDocumentList();
         for (CachingSimpleResult result : resultScoreDocs) {
-            Map<String, Object> m = new HashMap<>(2);
-            m.put("d", result.getDistance());
-            // add fields as requested:
-            if (req.getParams().get("fl") == null) {
-                m.put("id", result.getDocument().get("id"));
-                if (result.getDocument().get("title") != null) {
-                    m.put("title", result.getDocument().get("title"));
-                }
-            } else {
-                String fieldsRequested = req.getParams().get("fl");
-                if (fieldsRequested.contains("score")) {
-                    m.put("score", result.getDistance());
-                }
-                if (fieldsRequested.contains("*")) {
-                    // all fields
-                    for (IndexableField field : result.getDocument().getFields()) {
-                        String tmpField = field.name();
-
-                        if (result.getDocument().getFields(tmpField).length > 1) {
-                            m.put(result.getDocument().getFields(tmpField)[0].name(), result.getDocument().getValues(tmpField));
-                        } else if (result.getDocument().getFields(tmpField).length > 0) {
-                            m.put(result.getDocument().getFields(tmpField)[0].name(), result.getDocument().getFields(tmpField)[0].stringValue());
-                        }
-                    }
-                } else {
-                    StringTokenizer st;
-                    if (fieldsRequested.contains(",")) {
-                        st = new StringTokenizer(fieldsRequested, ",");
-                    } else {
-                        st = new StringTokenizer(fieldsRequested, " ");
-                    }
-                    while (st.hasMoreElements()) {
-                        String tmpField = st.nextToken();
-                        if (result.getDocument().getFields(tmpField).length > 1) {
-                            m.put(result.getDocument().getFields(tmpField)[0].name(), result.getDocument().getValues(tmpField));
-                        } else if (result.getDocument().getFields(tmpField).length > 0) {
-                            m.put(result.getDocument().getFields(tmpField)[0].name(), result.getDocument().getFields(tmpField)[0].stringValue());
-                        }
-                    }
-                }
-            }
-
-            list.add(new SolrDocument(m));
+            list.add(mapResultToDocument(req, result));
         }
         return list;
+    }
+
+    private static SolrDocument mapResultToDocument(SolrQueryRequest req, CachingSimpleResult result) {
+        Map<String, Object> m = new HashMap<>();
+        m.put("d", result.getDistance());
+        // add fields as requested:
+        if (req.getParams().get("fl") == null) {
+            m.put("id", result.getDocument().get("id"));
+            if (result.getDocument().get("title") != null) {
+                m.put("title", result.getDocument().get("title"));
+            }
+        } else {
+            String fieldsRequested = req.getParams().get("fl");
+            if (fieldsRequested.contains("score")) {
+                m.put("score", result.getDistance());
+            }
+            if (fieldsRequested.contains("*")) {
+                // all fields
+                for (IndexableField field : result.getDocument().getFields()) {
+                    String tmpField = field.name();
+                    appendField(result, tmpField, m);
+                }
+            } else {
+                boolean splitOnComma = fieldsRequested.contains(",");
+                String delimiter = splitOnComma ? "," : "";
+                StringTokenizer st = new StringTokenizer(fieldsRequested, delimiter);
+
+                while (st.hasMoreElements()) {
+                    String tmpField = st.nextToken();
+                    appendField(result, tmpField, m);
+                }
+            }
+        }
+        return new SolrDocument(m);
+    }
+
+    private static void appendField(CachingSimpleResult result, String tmpField, Map<String, Object> m) {
+        if (result.getDocument().getFields(tmpField).length > 1) {
+            m.put(result.getDocument().getFields(tmpField)[0].name(), result.getDocument().getValues(tmpField));
+        } else if (result.getDocument().getFields(tmpField).length > 0) {
+            m.put(result.getDocument().getFields(tmpField)[0].name(), result.getDocument().getFields(tmpField)[0].stringValue());
+        }
     }
 
     private TreeSet<CachingSimpleResult> getReRankedResults(
