@@ -329,8 +329,9 @@ public class LireRequestHandler extends RequestHandlerBase {
             query = getQuery(parameters.field, feat, req, rsp);
 
         } catch (Exception e) {
-            rsp.add("Error", "Error reading image from URL: " + parameters.url + ": " + e.getMessage());
+            rsp.add("Error", "Error reading image from upload: " + e.getMessage());
             e.printStackTrace();
+            System.err.println("Search failed: " + parameters);
         }
         // search if the feature has been extracted and query is there.
         if (feat != null && query != null) {
@@ -672,7 +673,7 @@ public class LireRequestHandler extends RequestHandlerBase {
      * @return
      */
     private List<String> orderHashes(int[] hashes, String paramField, boolean removeZeroDocFreqTerms) {
-        var hList = Arrays.stream(hashes)
+        List<String> hList = Arrays.stream(hashes)
                 .mapToObj(Integer::toHexString)
                 .sorted(Comparator.comparingInt(o -> HashTermStatistics.docFreq(paramField, o)))
                 .toList();
@@ -685,8 +686,7 @@ public class LireRequestHandler extends RequestHandlerBase {
         return hList;
     }
 
-    private BytesRef getBytesRef(BinaryDocValues bdv, int docId)
-            throws IOException {
+    private BytesRef getBytesRef(BinaryDocValues bdv, int docId) throws IOException {
         if (bdv != null && bdv.advance(docId) == docId) {
             return bdv.binaryValue();
         }
@@ -707,30 +707,28 @@ public class LireRequestHandler extends RequestHandlerBase {
     }
 
     private Query getQuery(String paramField, GlobalFeature feat, SolrQueryRequest req, SolrQueryResponse rsp) throws IOException, ParseException {
-        Query query;
-
         if (!useMetricSpaces) {
             // Re-generating the hashes to save space (instead of storing them in the index)
             HashTermStatistics.addToStatistics(req.getSearcher(), paramField);
             int[] hashes = BitSampling.generateHashes(feat.getFeatureVector());
-            query = createQuery(hashes, paramField, numberOfQueryTerms);
-        } else if (MetricSpaces.supportsFeature(feat)) {
-            // ----< Metric Spaces >-----
+            return createQuery(hashes, paramField, numberOfQueryTerms);
+        }
+
+        if (MetricSpaces.supportsFeature(feat)) {
             int queryLength = (int) StatsUtils.clamp(numberOfQueryTerms * MetricSpaces.getPostingListLength(feat), 3, MetricSpaces.getPostingListLength(feat));
             String msQuery = MetricSpaces.generateBoostedQuery(feat, queryLength);
             QueryParser qp = new QueryParser(paramField.replace("_ha", "_ms"), new WhitespaceAnalyzer());
-            query = qp.parse(msQuery);
-        } else {
-            rsp.add("Error", "Feature not supported by MetricSpaces: " + feat.getClass().getSimpleName());
-            query = new MatchAllDocsQuery();
+            return qp.parse(msQuery);
         }
 
-        return query;
+        rsp.add("Error", "Feature not supported by MetricSpaces: " + feat.getClass().getSimpleName());
+        return new MatchAllDocsQuery();
     }
 
     private static BufferedImage readImageFromStream(SolrQueryRequest req, SolrQueryResponse rsp) throws IOException {
         InputStream stream = null;
         Iterable<ContentStream> streams = req.getContentStreams();
+
         if (streams != null) {
             Iterator<ContentStream> iter = streams.iterator();
             if (iter.hasNext()) {
@@ -740,8 +738,13 @@ public class LireRequestHandler extends RequestHandlerBase {
                 rsp.add("Error", "Does not support multiple ContentStreams");
             }
         }
-        BufferedImage img = ImageIO.read(stream);
-        stream.close();
-        return img;
+
+        if (stream != null) {
+            BufferedImage img = ImageIO.read(stream);
+            stream.close();
+            return img;
+        }
+
+        throw new RuntimeException("Could not parse image, image stream is missing");
     }
 }
