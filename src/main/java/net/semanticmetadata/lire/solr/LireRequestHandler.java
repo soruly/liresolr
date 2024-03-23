@@ -520,11 +520,14 @@ public class LireRequestHandler extends RequestHandlerBase {
                 docIterator, binaryValues, queryFeature, tmpFeature,
                 maximumHits, searcher);
 
-        // Creating response ...
         time = System.currentTimeMillis() - time;
         rsp.add("ReRankSearchTime", time + "");
-        // replaced with SolrDocumentList for consistency.
 
+        SolrDocumentList results = getResults(req, resultScoreDocs);
+        rsp.add("response", results);
+    }
+
+    private static SolrDocumentList getResults(SolrQueryRequest req, TreeSet<CachingSimpleResult> resultScoreDocs) {
         SolrDocumentList list = new SolrDocumentList();
         for (CachingSimpleResult result : resultScoreDocs) {
             Map<String, Object> m = new HashMap<>(2);
@@ -571,9 +574,7 @@ public class LireRequestHandler extends RequestHandlerBase {
 
             list.add(new SolrDocument(m));
         }
-
-        // Format results to be similar to regular response
-        rsp.add("response", list);
+        return list;
     }
 
     private TreeSet<CachingSimpleResult> getReRankedResults(
