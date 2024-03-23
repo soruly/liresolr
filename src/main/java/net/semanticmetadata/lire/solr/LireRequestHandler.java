@@ -569,12 +569,18 @@ public class LireRequestHandler extends RequestHandlerBase {
         return new SolrDocument(m);
     }
 
-    private static void appendField(CachingSimpleResult result, String tmpField, Map<String, Object> m) {
-        if (result.getDocument().getFields(tmpField).length > 1) {
-            m.put(result.getDocument().getFields(tmpField)[0].name(), result.getDocument().getValues(tmpField));
-        } else if (result.getDocument().getFields(tmpField).length > 0) {
-            m.put(result.getDocument().getFields(tmpField)[0].name(), result.getDocument().getFields(tmpField)[0].stringValue());
+    private static void appendField(CachingSimpleResult result, String tmpField, Map<String, Object> resultFields) {
+        IndexableField[] fields = result.getDocument().getFields(tmpField);
+
+        if (fields.length == 0) {
+            return;
         }
+
+        Object value = fields.length > 1
+                ? result.getDocument().getValues(tmpField)
+                : fields[0].stringValue();
+
+        resultFields.put(fields[0].name(), value);
     }
 
     private TreeSet<CachingSimpleResult> getReRankedResults(
