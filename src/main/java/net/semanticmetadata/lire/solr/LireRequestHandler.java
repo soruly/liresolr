@@ -153,8 +153,6 @@ public class LireRequestHandler extends RequestHandlerBase {
         // (1) check if the necessary parameters are here
         if (req.getParams().get("hashes") != null) { // we are searching for hashes ... without hashes one should go for the lirefunc version.
             handleHashSearch(req, rsp); // not really supported, just here for legacy.
-        } else if (req.getParams().get("url") != null) { // we are searching for an image based on an URL
-            handleUrlSearch(req, rsp);
         } else if (req.getParams().get("id") != null) { // we are searching for an image based on an URL
             handleIdSearch(req, rsp);
         } else if (req.getParams().get("extract") != null) { // we are trying to extract from an image URL.
@@ -244,34 +242,6 @@ public class LireRequestHandler extends RequestHandlerBase {
             }
         }
         return filters;
-    }
-
-    /**
-     * Searches for an image given by an URL. Note that (i) extracting image features takes time and
-     * (ii) not every image is readable by Java.
-     */
-    private void handleUrlSearch(SolrQueryRequest req, SolrQueryResponse rsp) throws IOException, InstantiationException, IllegalAccessException {
-        SearchParameters parameters = new SearchParameters(req);
-        numberOfQueryTerms = parameters.numberOfQueryTerms;
-        numberOfCandidateResults = parameters.numberOfCandidateResults;
-        useMetricSpaces = parameters.useMetricSpaces;
-
-        GlobalFeature feat = null;
-        Query query = null;
-        // wrapping the whole part in the try
-        try {
-            ImageIO.setUseCache(false);
-            BufferedImage img = ImageIO.read(new URL(parameters.url).openStream());
-            feat = extractImageFeatures(parameters.field, img);
-            query = getQuery(parameters.field, feat, req, rsp);
-        } catch (Exception e) {
-            rsp.add("Error", "Error reading image from URL: " + parameters.url + ": " + e.getMessage());
-            e.printStackTrace();
-        }
-        // search if the feature has been extracted and query is there.
-        if (feat != null && query != null) {
-            doSearch(req, rsp, req.getSearcher(), parameters.field, parameters.rows, getFilterQueries(req), query, feat);
-        }
     }
 
     /**
