@@ -51,6 +51,7 @@ import net.semanticmetadata.lire.utils.StatsUtils;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.lucene.analysis.core.WhitespaceAnalyzer;
 import org.apache.lucene.document.Document;
+import org.apache.lucene.document.IntPoint;
 import org.apache.lucene.index.BinaryDocValues;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.MultiDocValues;
@@ -63,7 +64,6 @@ import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.Sort;
-import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.util.BytesRef;
 import org.apache.solr.common.SolrDocument;
@@ -87,6 +87,7 @@ import java.io.InputStream;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -96,6 +97,9 @@ import java.util.Map;
 import java.util.StringTokenizer;
 import java.util.TreeSet;
 
+import static java.util.stream.Collectors.toList;
+import static net.semanticmetadata.lire.solr.MathUtils.clampInt;
+
 /**
  * This is the main LIRE RequestHandler for the Solr Plugin. It supports query by example using the indexed id,
  * an url or a feature vector. Furthermore, feature extraction and random selection of images are supported.
@@ -104,7 +108,6 @@ import java.util.TreeSet;
  */
 
 public class LireRequestHandler extends RequestHandlerBase {
-    private long time = 0;
 
     /**
      * number of candidate results retrieved from the index. The higher this number, the slower,
@@ -130,7 +133,6 @@ public class LireRequestHandler extends RequestHandlerBase {
     static {
         HashingMetricSpacesManager.init(); // load reference points from disk.
     }
-
 
     @Override
     public void init(NamedList args) {
@@ -169,9 +171,6 @@ public class LireRequestHandler extends RequestHandlerBase {
 
     /**
      * Handles the get parameters id, field and rows.
-     *
-     * @param req
-     * @param rsp
      */
     private void handleIdSearch(SolrQueryRequest req, SolrQueryResponse rsp) {
         SearchParameters parameters = new SearchParameters(req);
@@ -372,7 +371,6 @@ public class LireRequestHandler extends RequestHandlerBase {
             }
             rsp.add("histogram", Base64.encodeBase64String(feat.getByteArrayRepresentation()));
             if (!useMetricSpaces || true) { // select the most distinguishing hashes and deliver them back.
-                HashTermStatistics.addToStatistics(req.getSearcher(), parameters.field);
                 int[] hashes = BitSampling.generateHashes(feat.getFeatureVector());
                 List<String> hashStrings;
                 List<String> hashQuery;
@@ -431,10 +429,6 @@ public class LireRequestHandler extends RequestHandlerBase {
         GlobalFeature queryFeature = (GlobalFeature) FeatureRegistry.getClassForHashField(paramField).newInstance();
         queryFeature.setByteArrayRepresentation(featureVector);
 
-        if (!useMetricSpaces) {
-            HashTermStatistics.addToStatistics(req.getSearcher(), paramField); // caching the term statistics.
-        }
-
         QueryParser qp = null;
         String queryString = null;
         if (params.get("hashes") == null) {
@@ -485,7 +479,7 @@ public class LireRequestHandler extends RequestHandlerBase {
         // temp feature instance
         GlobalFeature tmpFeature = queryFeature.getClass().newInstance();
         // Taking the time of search for statistical purposes.
-        time = System.currentTimeMillis();
+        long time = System.currentTimeMillis();
 
         String featureFieldName = FeatureRegistry.getFeatureFieldName(hashFieldName);
 
@@ -537,15 +531,16 @@ public class LireRequestHandler extends RequestHandlerBase {
 
     private static SolrDocument mapResultToDocument(SolrQueryRequest req, CachingSimpleResult result) {
         Map<String, Object> m = new HashMap<>();
+        String fieldsRequested = req.getParams().get("fl");
+
         m.put("d", result.getDistance());
-        // add fields as requested:
-        if (req.getParams().get("fl") == null) {
+
+        if (fieldsRequested == null) {
             m.put("id", result.getDocument().get("id"));
             if (result.getDocument().get("title") != null) {
                 m.put("title", result.getDocument().get("title"));
             }
         } else {
-            String fieldsRequested = req.getParams().get("fl");
             if (fieldsRequested.contains("score")) {
                 m.put("score", result.getDistance());
             }
@@ -566,6 +561,7 @@ public class LireRequestHandler extends RequestHandlerBase {
                 }
             }
         }
+
         return new SolrDocument(m);
     }
 
@@ -627,31 +623,31 @@ public class LireRequestHandler extends RequestHandlerBase {
 
     /**
      * Makes a Boolean query out of a list of hashes by ordering them ascending using their docFreq and
-     * then only using the most distinctive ones, defined by size in [0, 1], size=1 takes all.
+     * then only using the most distinctive ones, defined by sizePercentage in [0, 1], sizePercentage=1 takes all.
      *
      * @param hashes
      * @param paramField
-     * @param size       in [0, 1]
+     * @param sizePercentage in [0, 1]
      * @return
      */
-    private BooleanQuery createQuery(int[] hashes, String paramField, double size) {
-        size = Math.max(0, Math.min(size, 1d)); // clamp size.
-        List<String> hList = orderHashes(hashes, paramField, true);
-        int numHashes = (int) Math.min(hList.size(), Math.floor(hashes.length * size));
-        // a minimum of 1 hashes ...
-        if (numHashes < 1) {
-            numHashes = 1;
-        }
+    private BooleanQuery createQuery(int[] hashes, String paramField, double sizePercentage) {
+        Collection<Integer> queryableHashes = computeQueryableHashes(paramField, hashes, sizePercentage);
+        Query hashesQuery = IntPoint.newSetQuery(paramField, queryableHashes);
+        System.out.println("queryableHashes: " + queryableHashes.size());
 
-        BooleanQuery.Builder queryBuilder = new BooleanQuery.Builder();
-        for (int i = 0; i < numHashes; i++) {
-            // be aware that the hashFunctionsFileName of the field must match the one you put the hashes in before.
-            queryBuilder.add(new BooleanClause(new TermQuery(new Term(paramField, hList.get(i))), BooleanClause.Occur.SHOULD));
-        }
-        // this query is just for boosting the results with more matching hashes. We'd need to match it to all docs.
-        //queryBuilder.add(new BooleanClause(new MatchAllDocsQuery(), BooleanClause.Occur.SHOULD));
-        BooleanQuery query = queryBuilder.build();
-        return query;
+        return new BooleanQuery.Builder()
+                .add(hashesQuery, BooleanClause.Occur.SHOULD)
+                .build();
+    }
+
+    private Collection<Integer> computeQueryableHashes(String paramField, int[] hashes, double sizePercentage) {
+        int hashesCount = clampInt((int) Math.floor(hashes.length * sizePercentage), 1, hashes.length);
+        return Arrays.stream(hashes)
+                .boxed()
+                .filter(hash -> HashFrequenciesCache.getHashFrequency(paramField, hash) > 0)
+                .sorted(Comparator.comparingInt(hash -> HashFrequenciesCache.getHashFrequency(paramField, hash)))
+                .limit(hashesCount)
+                .collect(toList());
     }
 
     /**
@@ -680,17 +676,7 @@ public class LireRequestHandler extends RequestHandlerBase {
      * @return
      */
     private List<String> orderHashes(int[] hashes, String paramField, boolean removeZeroDocFreqTerms) {
-        List<String> hList = Arrays.stream(hashes)
-                .mapToObj(Integer::toHexString)
-                .sorted(Comparator.comparingInt(o -> HashTermStatistics.docFreq(paramField, o)))
-                .toList();
-
-        // removing those with zero entries but leaving at least three.
-        while (HashTermStatistics.docFreq(paramField, hList.getFirst()) < 1 && hList.size() > 3) {
-            hList.removeFirst();
-        }
-
-        return hList;
+        throw new RuntimeException("This functionality is no longer supported");
     }
 
     private BytesRef getBytesRef(BinaryDocValues bdv, int docId) throws IOException {
@@ -715,8 +701,6 @@ public class LireRequestHandler extends RequestHandlerBase {
 
     private Query getQuery(String paramField, GlobalFeature feat, SolrQueryRequest req, SolrQueryResponse rsp) throws IOException, ParseException {
         if (!useMetricSpaces) {
-            // Re-generating the hashes to save space (instead of storing them in the index)
-            HashTermStatistics.addToStatistics(req.getSearcher(), paramField);
             int[] hashes = BitSampling.generateHashes(feat.getFeatureVector());
             return createQuery(hashes, paramField, numberOfQueryTerms);
         }
