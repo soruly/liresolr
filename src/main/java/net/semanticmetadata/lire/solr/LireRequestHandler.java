@@ -136,26 +136,11 @@ public class LireRequestHandler extends RequestHandlerBase {
         super.init(args);
     }
 
-    /**
-     * Handles three types of requests.
-     * <ol>
-     * <li>search by already extracted images.</li>
-     * <li>search by an image URL.</li>
-     * <li>Random results.</li>
-     * </ol>
-     *
-     * @param req
-     * @param rsp
-     * @throws Exception
-     */
     @Override
     public void handleRequestBody(SolrQueryRequest req, SolrQueryResponse rsp) throws Exception {
-        // (1) check if the necessary parameters are here
-        if (req.getParams().get("hashes") != null) { // we are searching for hashes ... without hashes one should go for the lirefunc version.
-            handleHashSearch(req, rsp); // not really supported, just here for legacy.
-        } else if (req.getParams().get("id") != null) { // we are searching for an image based on an URL
+        if (req.getParams().get("id") != null) {
             handleIdSearch(req, rsp);
-        } else if (req.getParams().get("extract") != null) { // we are trying to extract from an image URL.
+        } else if (req.getParams().get("extract") != null) {
             handleExtract(req, rsp);
         } else {
             handleUploadSearch(req, rsp);
@@ -334,69 +319,6 @@ public class LireRequestHandler extends RequestHandlerBase {
             rsp.add("Error", "Error reading image from URL: " + paramUrl + ": " + e.getMessage());
             e.printStackTrace();
         }
-    }
-
-    /**
-     * Search based on the given image hashes.
-     */
-    private void handleHashSearch(SolrQueryRequest req, SolrQueryResponse rsp) throws IOException, IllegalAccessException, InstantiationException {
-        SolrParams params = req.getParams();
-        SolrIndexSearcher searcher = req.getSearcher();
-        // get the params needed:
-        // hashes=x y z ...
-        // feature=<base64>
-        // field=<cl_ha|ph_ha|...>
-
-        byte[] featureVector = Base64.decodeBase64(params.get("feature"));
-        String paramField = req.getParams().get("field", "cl_ha");
-
-        // _ms is added automatically below and cause issues if kept here
-        paramField = paramField.replace("_ms", "");
-
-        if (!paramField.endsWith("_ha")) {
-            paramField += "_ha";
-        }
-
-        SearchParameters parameters = new SearchParameters(req);
-
-        numberOfQueryTerms = parameters.numberOfQueryTerms;
-        numberOfCandidateResults = parameters.numberOfCandidateResults;
-        useMetricSpaces = parameters.useMetricSpaces;
-
-        // query feature
-        GlobalFeature queryFeature = (GlobalFeature) FeatureRegistry.getClassForHashField(paramField).newInstance();
-        queryFeature.setByteArrayRepresentation(featureVector);
-
-        QueryParser qp = null;
-        String queryString = null;
-        if (params.get("hashes") == null) {
-            // we have to create the hashes first ...
-            if (!useMetricSpaces) {
-
-            } else if (MetricSpaces.supportsFeature(queryFeature)) {
-                int queryLength = (int) StatsUtils.clamp(numberOfQueryTerms * MetricSpaces.getPostingListLength(queryFeature),
-                        3, MetricSpaces.getPostingListLength(queryFeature));
-                queryString = MetricSpaces.generateBoostedQuery(queryFeature, queryLength);
-            } else {
-                queryString = "*:*";
-            }
-        } else {
-            queryString = params.get("hashes").trim();
-            if (!useMetricSpaces) {
-                qp = new QueryParser(paramField, new WhitespaceAnalyzer());
-            } else {
-                qp = new QueryParser(paramField.replace("_ha", "_ms"), new WhitespaceAnalyzer());
-            }
-        }
-
-        Query query = null;
-        try {
-            query = qp.parse(queryString);
-        } catch (ParseException e) {
-            e.printStackTrace();
-        }
-
-        doSearch(req, rsp, searcher, paramField, parameters.rows, getFilterQueries(req), query, queryFeature);
     }
 
     /**
