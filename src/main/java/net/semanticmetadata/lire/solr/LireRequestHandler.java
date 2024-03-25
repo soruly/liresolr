@@ -186,7 +186,7 @@ public class LireRequestHandler extends RequestHandlerBase {
                     query = new MatchAllDocsQuery();
                     rsp.add("Note", "Switching to AllDocumentsQuery because accuracy is set higher than 0.9.");
                 } else {
-                    query = getQuery(parameters.field, queryFeature, req, rsp);
+                    query = getQuery(parameters.field, queryFeature, rsp);
                 }
                 doSearch(req, rsp, searcher, parameters.field, parameters.rows, getFilterQueries(req), query, queryFeature);
             } else {
@@ -251,7 +251,7 @@ public class LireRequestHandler extends RequestHandlerBase {
             ImageIO.setUseCache(false);
             BufferedImage img = readImageFromStream(req, rsp);
             feat = extractImageFeatures(parameters.field, img);
-            query = getQuery(parameters.field, feat, req, rsp);
+            query = getQuery(parameters.field, feat, rsp);
 
         } catch (Exception e) {
             rsp.add("Error", "Error reading image from upload: " + e.getMessage());
@@ -532,7 +532,7 @@ public class LireRequestHandler extends RequestHandlerBase {
         return feat;
     }
 
-    private Query getQuery(String paramField, GlobalFeature feat, SolrQueryRequest req, SolrQueryResponse rsp) throws ParseException {
+    private Query getQuery(String paramField, GlobalFeature feat, SolrQueryResponse rsp) throws ParseException {
         if (!useMetricSpaces) {
             int[] hashes = BitSampling.generateHashes(feat.getFeatureVector());
             return createQuery(hashes, paramField, numberOfQueryTerms);
