@@ -93,6 +93,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.StringTokenizer;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 
 import static java.util.stream.Collectors.toList;
 import static net.semanticmetadata.lire.solr.MathUtils.clampInt;
@@ -192,8 +193,10 @@ public class LireRequestHandler extends RequestHandlerBase {
                 rsp.add("Error", "Did not find an image with the given id " + parameters.id);
             }
         } catch (Exception e) {
-            rsp.add("Error", "There was an error with your search for the image with the id " + parameters.id
-                    + ": " + e.getMessage());
+            rsp.add(
+                    "Error",
+                    "There was an error with your search for the image with the id " + parameters.id + ": " + e.getMessage()
+            );
         }
     }
 
@@ -270,11 +273,10 @@ public class LireRequestHandler extends RequestHandlerBase {
         SolrParams params = req.getParams();
         String paramUrl = params.get("extract");
 
-        boolean useOrderHashes = params.getBool("oh", true);
         useMetricSpaces = parameters.useMetricSpaces;
         double accuracy = parameters.numberOfQueryTerms;
         GlobalFeature feat;
-        // wrapping the whole part in the try
+
         try {
             if (!parameters.field.startsWith("sf")) {
                 ImageIO.setUseCache(false);
@@ -292,22 +294,24 @@ public class LireRequestHandler extends RequestHandlerBase {
                 short[] featureShort = Utilities.toShortArray(featureDoubles); // quantize
                 ((ShortFeatureCosineDistance) feat).setData(featureShort);
             }
+
             rsp.add("histogram", Base64.encodeBase64String(feat.getByteArrayRepresentation()));
-            if (!useMetricSpaces || true) { // select the most distinguishing hashes and deliver them back.
-                int[] hashes = BitSampling.generateHashes(feat.getFeatureVector());
-                List<String> hashStrings;
-                List<String> hashQuery;
-                if (useOrderHashes) {
-                    hashStrings = orderHashes(hashes, parameters.field, false);
-                    hashQuery = orderHashes(hashes, parameters.field, true);
-                } else {
-                    hashStrings = arrayToListString(hashes);
-                    hashQuery = arrayToListString(hashes);
-                }
-                int queryLength = (int) StatsUtils.clamp(accuracy * hashes.length, 3, hashQuery.size());
-                rsp.add("bs_list", hashStrings);
-                rsp.add("bs_query", String.join(" ", hashQuery.subList(0, queryLength)));
-            }
+
+            int[] hashes = BitSampling.generateHashes(feat.getFeatureVector());
+
+            String hashStrings = Arrays.stream(hashes)
+                    .boxed()
+                    .map(hash -> Integer.toString(hash))
+                    .collect(Collectors.joining(","));
+
+            String queryableHashes = computeQueryableHashes(parameters.field, hashes, accuracy)
+                    .stream()
+                    .map(hash -> Integer.toString(hash))
+                    .collect(Collectors.joining(","));
+
+            rsp.add("bs_list", hashStrings);
+            rsp.add("bs_query", queryableHashes);
+
             if (MetricSpaces.supportsFeature(feat)) {
                 rsp.add("ms_list", MetricSpaces.generateHashList(feat));
                 int queryLength = (int) StatsUtils.clamp(
@@ -336,9 +340,7 @@ public class LireRequestHandler extends RequestHandlerBase {
     private void doSearch(SolrQueryRequest req, SolrQueryResponse rsp, SolrIndexSearcher searcher, String hashFieldName,
                           int maximumHits, List<Query> filterQueries, Query query, GlobalFeature queryFeature)
             throws IOException, IllegalAccessException, InstantiationException {
-        // temp feature instance
         GlobalFeature tmpFeature = queryFeature.getClass().newInstance();
-        // Taking the time of search for statistical purposes.
         long time = System.currentTimeMillis();
 
         String featureFieldName = FeatureRegistry.getFeatureFieldName(hashFieldName);
@@ -510,35 +512,6 @@ public class LireRequestHandler extends RequestHandlerBase {
                 .collect(toList());
     }
 
-    /**
-     * Convert int hashes to a string list
-     *
-     * @param hashes the int[] of hashes
-     * @return
-     */
-    private List<String> arrayToListString(int[] hashes) {
-        List<String> hList = new ArrayList<>(hashes.length);
-        // creates a list of terms.
-        for (int hashe : hashes) {
-            hList.add(Integer.toHexString(hashe));
-        }
-        return hList;
-    }
-
-    /**
-     * Sorts the hashes to put those first, that do not show up in a large number of documents
-     * while deleting those that are not in the index at all. Meaning: terms sorted by docFreq ascending, removing
-     * those with docFreq == 0
-     *
-     * @param hashes                 the int[] of hashes
-     * @param paramField             the field in the index.
-     * @param removeZeroDocFreqTerms
-     * @return
-     */
-    private List<String> orderHashes(int[] hashes, String paramField, boolean removeZeroDocFreqTerms) {
-        throw new RuntimeException("This functionality is no longer supported");
-    }
-
     private BytesRef getBytesRef(BinaryDocValues bdv, int docId) throws IOException {
         if (bdv != null && bdv.advance(docId) == docId) {
             return bdv.binaryValue();
@@ -559,7 +532,7 @@ public class LireRequestHandler extends RequestHandlerBase {
         return feat;
     }
 
-    private Query getQuery(String paramField, GlobalFeature feat, SolrQueryRequest req, SolrQueryResponse rsp) throws IOException, ParseException {
+    private Query getQuery(String paramField, GlobalFeature feat, SolrQueryRequest req, SolrQueryResponse rsp) throws ParseException {
         if (!useMetricSpaces) {
             int[] hashes = BitSampling.generateHashes(feat.getFeatureVector());
             return createQuery(hashes, paramField, numberOfQueryTerms);
