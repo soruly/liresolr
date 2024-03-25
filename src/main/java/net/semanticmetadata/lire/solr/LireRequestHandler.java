@@ -50,7 +50,6 @@ import net.semanticmetadata.lire.solr.tools.Utilities;
 import net.semanticmetadata.lire.utils.StatsUtils;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.lucene.analysis.core.WhitespaceAnalyzer;
-import org.apache.lucene.document.Document;
 import org.apache.lucene.document.IntPoint;
 import org.apache.lucene.index.BinaryDocValues;
 import org.apache.lucene.index.IndexableField;
@@ -74,7 +73,6 @@ import org.apache.solr.common.util.NamedList;
 import org.apache.solr.handler.RequestHandlerBase;
 import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.response.SolrQueryResponse;
-import org.apache.solr.search.DocIterator;
 import org.apache.solr.search.DocList;
 import org.apache.solr.search.QParser;
 import org.apache.solr.search.SolrIndexSearcher;
@@ -91,7 +89,6 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.StringTokenizer;
@@ -162,8 +159,6 @@ public class LireRequestHandler extends RequestHandlerBase {
             handleIdSearch(req, rsp);
         } else if (req.getParams().get("extract") != null) { // we are trying to extract from an image URL.
             handleExtract(req, rsp);
-        } else if (req.getParams().get("random") != null) { // lets return random results.
-            handleRandomSearch(req, rsp);
         } else {
             handleUploadSearch(req, rsp);
         }
@@ -249,33 +244,6 @@ public class LireRequestHandler extends RequestHandlerBase {
             }
         }
         return filters;
-    }
-
-    /**
-     * Returns a random set of documents from the index. Mainly for testing purposes.
-     */
-    private void handleRandomSearch(SolrQueryRequest req, SolrQueryResponse rsp) throws IOException {
-        SearchParameters parameters = new SearchParameters(req);
-        SolrIndexSearcher searcher = req.getSearcher();
-        Query query = new MatchAllDocsQuery();
-        DocList docList = searcher.getDocList(query, getFilterQueries(req), Sort.RELEVANCE, 0, numberOfCandidateResults, 0);
-        int paramRows = Math.min(parameters.rows, docList.size());
-        if (docList.size() < 1) {
-            rsp.add("Error", "No documents in index");
-        } else {
-            List<Document> list = new LinkedList<>();
-            while (list.size() < paramRows) {
-                DocList auxList = docList.subset((int) (Math.random() * docList.size()), 1);
-                Document doc = null;
-                for (DocIterator it = auxList.iterator(); it.hasNext(); ) {
-                    doc = searcher.doc(it.nextDoc());
-                }
-                if (!list.contains(doc)) {
-                    list.add(doc);
-                }
-            }
-            rsp.addResponse(list);
-        }
     }
 
     /**
