@@ -62,7 +62,6 @@ import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.Query;
-import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.util.BytesRef;
 import org.apache.solr.common.SolrDocument;
@@ -359,8 +358,8 @@ public class LireRequestHandler extends RequestHandlerBase {
         Iterator<Integer> docIterator;
         long numberOfResults = 0;
         time = System.currentTimeMillis();
-        if (filterQueries != null) {
-            DocList docList = searcher.getDocList(query, filterQueries, Sort.RELEVANCE, 0, numberOfCandidateResults, 0);
+        if (filterQueries != null && !filterQueries.isEmpty()) {
+            DocList docList = searcher.getDocList(query, filterQueries, null, 0, numberOfCandidateResults, 0);
             numberOfResults = docList.size();
             docIterator = docList.iterator();
         } else {
