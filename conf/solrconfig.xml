@@ -439,9 +439,9 @@
          document).  Since Lucene internal document ids are transient,
          this cache will not be autowarmed.
       -->
-    <documentCache size="512"
-                   initialSize="512"
-                   autowarmCount="0"/>
+<!--    <documentCache size="512"-->
+<!--                   initialSize="512"-->
+<!--                   autowarmCount="0"/>-->
 
     <!-- custom cache currently used by block join -->
     <cache name="perSegFilter"
@@ -1245,7 +1245,7 @@
      plain text so that they are easy to read in *any* browser.
      If you expect a MIME type of "application/json" just remove this override.
     -->
-    <str name="content-type">text/plain; charset=UTF-8</str>
+<!--    <str name="content-type">text/plain; charset=UTF-8</str>-->
   </queryResponseWriter>
 
   <!-- Query Parsers
@@ -1303,7 +1303,7 @@
       <lst name="defaults">
         <str name="echoParams">explicit</str>
         <str name="wt">json</str>
-        <str name="indent">true</str>
+        <str name="indent">false</str>
       </lst>
     </requestHandler>
 
