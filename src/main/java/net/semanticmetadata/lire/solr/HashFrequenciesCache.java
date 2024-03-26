@@ -31,8 +31,9 @@ public final class HashFrequenciesCache {
     }
 
     public static void updateAll(String coreName) {
-        // TODO Filter all fields, one day..
-        update(coreName, "cl_ha");
+        for (String code : FeatureRegistry.getSupportedCodes()) {
+            update(coreName, code + "_ha");
+        }
     }
 
     public static void update(String coreName, String field) {
