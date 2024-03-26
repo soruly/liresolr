@@ -32,13 +32,18 @@ public final class HashFrequenciesCache {
 
     public static void updateAll(String coreName) {
         for (String code : FeatureRegistry.getSupportedCodes()) {
-            update(coreName, code + "_ha");
+            update(coreName, code + "_ha", false);
         }
     }
 
-    public static void update(String coreName, String field) {
-        // FIXME Allow updating when committed.
-        if (HASH_FREQUENCIES.containsKey(field)) {
+    public static void updateAllCommit(String coreName) {
+        for (String code : FeatureRegistry.getSupportedCodes()) {
+            update(coreName, code + "_ha", true);
+        }
+    }
+
+    public static void update(String coreName, String field, boolean wasCommit) {
+        if (!wasCommit && HASH_FREQUENCIES.containsKey(field)) {
             return;
         }
 

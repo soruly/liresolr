@@ -28,7 +28,7 @@ public final class CacheUpdateRequestsProcessor extends UpdateRequestProcessor {
         super.finish();
 
         if (wasCommitted) {
-            HashFrequenciesCache.updateAll(coreName);
+            HashFrequenciesCache.updateAllCommit(coreName);
         }
     }
 
