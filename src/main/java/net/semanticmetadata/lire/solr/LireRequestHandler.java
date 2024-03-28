@@ -106,29 +106,8 @@ import static net.semanticmetadata.lire.solr.MathUtils.clampInt;
 
 public class LireRequestHandler extends RequestHandlerBase {
 
-    /**
-     * number of candidate results retrieved from the index. The higher this number, the slower,
-     * the but more accurate the retrieval will be. 10k is a good value for starters.
-     */
-    private int numberOfCandidateResults = 10000;
-
-
-    /**
-     * The number of query terms that go along with the TermsFilter search. We need some to get a
-     * score, the less the faster. I put down a minimum of three in the method, this value gives
-     * the percentage of the overall number used (selected randomly).
-     */
-    private double numberOfQueryTerms = 0.33;
-
-
-    /**
-     * If metric spaces should be used instead of BitSampling.
-     */
-    private boolean useMetricSpaces = false;
-
-
     static {
-        HashingMetricSpacesManager.init(); // load reference points from disk.
+        HashingMetricSpacesManager.init();
     }
 
     @Override
@@ -153,41 +132,34 @@ public class LireRequestHandler extends RequestHandlerBase {
     private void handleIdSearch(SolrQueryRequest req, SolrQueryResponse rsp) {
         SearchParameters parameters = new SearchParameters(req);
         SolrIndexSearcher searcher = req.getSearcher();
+
         try {
             int queryDocId = searcher.getFirstMatch(new Term("id", parameters.id));
 
-            numberOfQueryTerms = parameters.numberOfQueryTerms;
-            numberOfCandidateResults = parameters.numberOfCandidateResults;
-            useMetricSpaces = parameters.useMetricSpaces;
-
-            GlobalFeature queryFeature = (GlobalFeature) FeatureRegistry.getClassForHashField(parameters.field).newInstance();
+            GlobalFeature queryFeature = FeatureRegistry.getClassForHashField(parameters.field).newInstance();
             rsp.add("QueryField", parameters.field);
             rsp.add("QueryFeature", queryFeature.getClass().getName());
             if (queryDocId > -1) {
 
-                BinaryDocValues binaryValues = new RandomAccessBinaryDocValues(() -> {
+                final BinaryDocValues binaryValues = new RandomAccessBinaryDocValues(() -> {
                     try {
                         return MultiDocValues.getBinaryValues(searcher.getIndexReader(), FeatureRegistry.getFeatureFieldName(parameters.field));
                     } catch (IOException e) {
                         throw new RuntimeException("BinaryDocValues problem.", e);
                     }
-
                 });
-                if (binaryValues == null) {
-                    rsp.add("Error", "Could not find the DocValues of the query document. Are they in the index? Id: " + parameters.id);
-                }
 
                 BytesRef bvBytesRef = getBytesRef(binaryValues, queryDocId);
                 queryFeature.setByteArrayRepresentation(bvBytesRef.bytes, bvBytesRef.offset, bvBytesRef.length);
 
-                Query query = null;
-                if (numberOfQueryTerms >= 0.90) {
+                Query query;
+                if (parameters.numberOfQueryTerms >= 0.90) {
                     query = new MatchAllDocsQuery();
                     rsp.add("Note", "Switching to AllDocumentsQuery because accuracy is set higher than 0.9.");
                 } else {
-                    query = getQuery(req.getCore().getName(), parameters.field, queryFeature, rsp);
+                    query = getQuery(req.getCore().getName(), parameters, queryFeature, rsp);
                 }
-                doSearch(req, rsp, searcher, parameters.field, parameters.rows, getFilterQueries(req), query, queryFeature);
+                doSearch(req, rsp, searcher, parameters, getFilterQueries(req), query, queryFeature);
             } else {
                 rsp.add("Error", "Did not find an image with the given id " + parameters.id);
             }
@@ -203,15 +175,13 @@ public class LireRequestHandler extends RequestHandlerBase {
      * Parses the fq param and adds it as a list of filter queries or reverts to null if nothing is found
      * or an Exception is thrown.
      *
-     * @param req
      * @return either a query from the QueryParser or null
      */
     private List<Query> getFilterQueries(SolrQueryRequest req) {
-        List<Query> filters = null;
-
+        var filters = new ArrayList<Query>();
         String[] fqs = req.getParams().getParams("fq");
+
         if (fqs != null && fqs.length != 0) {
-            filters = new ArrayList<>(fqs.length);
             try {
                 for (String fq : fqs) {
                     if (fq != null && !fq.trim().isEmpty()) {
@@ -223,11 +193,8 @@ public class LireRequestHandler extends RequestHandlerBase {
             } catch (SyntaxError e) {
                 e.printStackTrace();
             }
-
-            if (filters.isEmpty()) {
-                filters = null;
-            }
         }
+
         return filters;
     }
 
@@ -237,29 +204,23 @@ public class LireRequestHandler extends RequestHandlerBase {
      */
     private void handleUploadSearch(SolrQueryRequest req, SolrQueryResponse rsp) throws IOException, InstantiationException, IllegalAccessException {
         SearchParameters parameters = new SearchParameters(req);
-        numberOfQueryTerms = parameters.numberOfQueryTerms;
-        numberOfCandidateResults = parameters.numberOfCandidateResults;
-        useMetricSpaces = parameters.useMetricSpaces;
-
         System.out.println("Upload search: " + parameters);
 
         GlobalFeature feat = null;
         Query query = null;
-        // wrapping the whole part in the try
+
         try {
-            ImageIO.setUseCache(false);
             BufferedImage img = readImageFromStream(req, rsp);
             feat = extractImageFeatures(parameters.field, img);
-            query = getQuery(req.getCore().getName(), parameters.field, feat, rsp);
-
+            query = getQuery(req.getCore().getName(), parameters, feat, rsp);
         } catch (Exception e) {
             rsp.add("Error", "Error reading image from upload: " + e.getMessage());
             e.printStackTrace();
             System.err.println("Search failed: " + parameters);
         }
-        // search if the feature has been extracted and query is there.
+
         if (feat != null && query != null) {
-            doSearch(req, rsp, req.getSearcher(), parameters.field, parameters.rows, getFilterQueries(req), query, feat);
+            doSearch(req, rsp, req.getSearcher(), parameters, getFilterQueries(req), query, feat);
         }
     }
 
@@ -268,12 +229,9 @@ public class LireRequestHandler extends RequestHandlerBase {
      */
     private void handleExtract(SolrQueryRequest req, SolrQueryResponse rsp) {
         SearchParameters parameters = new SearchParameters(req);
-
         SolrParams params = req.getParams();
         String paramUrl = params.get("extract");
 
-        useMetricSpaces = parameters.useMetricSpaces;
-        double accuracy = parameters.numberOfQueryTerms;
         GlobalFeature feat;
 
         try {
@@ -303,7 +261,7 @@ public class LireRequestHandler extends RequestHandlerBase {
                     .map(hash -> Integer.toString(hash))
                     .collect(Collectors.joining(","));
 
-            String queryableHashes = computeQueryableHashes(parameters.field, hashes, accuracy)
+            String queryableHashes = computeQueryableHashes(parameters.field, hashes, parameters.numberOfQueryTerms)
                     .stream()
                     .map(hash -> Integer.toString(hash))
                     .collect(Collectors.joining(","));
@@ -314,13 +272,14 @@ public class LireRequestHandler extends RequestHandlerBase {
             if (MetricSpaces.supportsFeature(feat)) {
                 rsp.add("ms_list", MetricSpaces.generateHashList(feat));
                 int queryLength = (int) StatsUtils.clamp(
-                        accuracy * MetricSpaces.getPostingListLength(feat), 3, MetricSpaces.getPostingListLength(feat)
+                        parameters.numberOfQueryTerms * MetricSpaces.getPostingListLength(feat), 3, MetricSpaces.getPostingListLength(feat)
                 );
                 rsp.add("ms_query", MetricSpaces.generateBoostedQuery(feat, queryLength));
             }
         } catch (Exception e) {
             rsp.add("Error", "Error reading image from URL: " + paramUrl + ": " + e.getMessage());
             e.printStackTrace();
+            System.err.println("Error reading image from URL: " + paramUrl);
         }
     }
 
@@ -330,21 +289,21 @@ public class LireRequestHandler extends RequestHandlerBase {
      * @param req           the SolrQueryRequest
      * @param rsp           the response to write the data to
      * @param searcher      the actual index searcher object to search the index
-     * @param hashFieldName the name of the field the hashes can be found
-     * @param maximumHits   the maximum number of hits, the smaller the faster
+     * @param parameters    the search parameters including the field, max results and candidates
      * @param filterQueries can be null
      * @param query         the (Boolean) query for querying the candidates from the IndexSearcher
      * @param queryFeature  the image feature used for re-ranking the results
      */
-    private void doSearch(SolrQueryRequest req, SolrQueryResponse rsp, SolrIndexSearcher searcher, String hashFieldName,
-                          int maximumHits, List<Query> filterQueries, Query query, GlobalFeature queryFeature)
-            throws IOException, IllegalAccessException, InstantiationException {
+    private void doSearch(
+            SolrQueryRequest req, SolrQueryResponse rsp, SolrIndexSearcher searcher, SearchParameters parameters,
+            List<Query> filterQueries, Query query, GlobalFeature queryFeature
+    ) throws IOException, IllegalAccessException, InstantiationException {
         GlobalFeature tmpFeature = queryFeature.getClass().newInstance();
         long time = System.currentTimeMillis();
 
-        String featureFieldName = FeatureRegistry.getFeatureFieldName(hashFieldName);
+        String featureFieldName = FeatureRegistry.getFeatureFieldName(parameters.field);
 
-        BinaryDocValues binaryValues = new RandomAccessBinaryDocValues(() -> {
+        final BinaryDocValues binaryValues = new RandomAccessBinaryDocValues(() -> {
             try {
                 return MultiDocValues.getBinaryValues(searcher.getIndexReader(), featureFieldName);
             } catch (IOException e) {
@@ -356,14 +315,14 @@ public class LireRequestHandler extends RequestHandlerBase {
         rsp.add("DocValuesOpenTime", time + "");
 
         Iterator<Integer> docIterator;
-        long numberOfResults = 0;
+        long numberOfResults;
         time = System.currentTimeMillis();
-        if (filterQueries != null && !filterQueries.isEmpty()) {
-            DocList docList = searcher.getDocList(query, filterQueries, null, 0, numberOfCandidateResults, 0);
+        if (!filterQueries.isEmpty()) {
+            DocList docList = searcher.getDocList(query, filterQueries, null, 0, parameters.numberOfCandidateResults, 0);
             numberOfResults = docList.size();
             docIterator = docList.iterator();
         } else {
-            TopDocs docs = searcher.search(query, numberOfCandidateResults);
+            TopDocs docs = searcher.search(query, parameters.numberOfCandidateResults);
             numberOfResults = docs.totalHits.value;
             docIterator = new TopDocsIterator(docs);
         }
@@ -372,8 +331,8 @@ public class LireRequestHandler extends RequestHandlerBase {
         rsp.add("RawDocsSearchTime", time + "");
         time = System.currentTimeMillis();
         TreeSet<CachingSimpleResult> resultScoreDocs = getReRankedResults(
-                docIterator, binaryValues, queryFeature, tmpFeature,
-                maximumHits, searcher);
+                docIterator, binaryValues, queryFeature, tmpFeature, parameters.rows, searcher
+        );
 
         time = System.currentTimeMillis() - time;
         rsp.add("ReRankSearchTime", time + "");
@@ -485,11 +444,6 @@ public class LireRequestHandler extends RequestHandlerBase {
     /**
      * Makes a Boolean query out of a list of hashes by ordering them ascending using their docFreq and
      * then only using the most distinctive ones, defined by sizePercentage in [0, 1], sizePercentage=1 takes all.
-     *
-     * @param hashes
-     * @param paramField
-     * @param sizePercentage in [0, 1]
-     * @return
      */
     private BooleanQuery createQuery(int[] hashes, String paramField, double sizePercentage) {
         Collection<Integer> queryableHashes = computeQueryableHashes(paramField, hashes, sizePercentage);
@@ -518,29 +472,28 @@ public class LireRequestHandler extends RequestHandlerBase {
     }
 
     private GlobalFeature extractImageFeatures(String paramField, BufferedImage img) throws InstantiationException, IllegalAccessException {
-        GlobalFeature feat;
+        var featureClass = FeatureRegistry.getClassForHashField(paramField);
 
-        if (FeatureRegistry.getClassForHashField(paramField) == null) {
-            feat = new ColorLayout();
-        } else {
-            feat = (GlobalFeature) FeatureRegistry.getClassForHashField(paramField).newInstance();
-        }
+        var feature = featureClass != null
+                ? FeatureRegistry.getClassForHashField(paramField).newInstance()
+                : new ColorLayout();
 
-        feat.extract(img);
-        return feat;
+        feature.extract(img);
+
+        return feature;
     }
 
-    private Query getQuery(String coreName, String paramField, GlobalFeature feat, SolrQueryResponse rsp) throws ParseException {
-        if (!useMetricSpaces) {
+    private Query getQuery(String coreName, SearchParameters parameters, GlobalFeature feat, SolrQueryResponse rsp) throws ParseException {
+        if (!parameters.useMetricSpaces) {
             HashFrequenciesCache.updateAll(coreName); // FIXME Remove and run in a spare thread.
             int[] hashes = BitSampling.generateHashes(feat.getFeatureVector());
-            return createQuery(hashes, paramField, numberOfQueryTerms);
+            return createQuery(hashes, parameters.field, parameters.numberOfQueryTerms);
         }
 
         if (MetricSpaces.supportsFeature(feat)) {
-            int queryLength = (int) StatsUtils.clamp(numberOfQueryTerms * MetricSpaces.getPostingListLength(feat), 3, MetricSpaces.getPostingListLength(feat));
+            int queryLength = (int) StatsUtils.clamp(parameters.numberOfQueryTerms * MetricSpaces.getPostingListLength(feat), 3, MetricSpaces.getPostingListLength(feat));
             String msQuery = MetricSpaces.generateBoostedQuery(feat, queryLength);
-            QueryParser qp = new QueryParser(paramField.replace("_ha", "_ms"), new WhitespaceAnalyzer());
+            QueryParser qp = new QueryParser(parameters.field.replace("_ha", "_ms"), new WhitespaceAnalyzer());
             return qp.parse(msQuery);
         }
 

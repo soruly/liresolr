@@ -6,8 +6,24 @@ import org.apache.solr.request.SolrQueryRequest;
 public class SearchParameters {
 
     private static final int DEFAULT_NUMBER_OF_RESULTS = 60;
+
+    /**
+     * The number of query terms that go along with the TermsFilter search. We need some to get a
+     * score, the less the faster. I put down a minimum of three in the method, this value gives
+     * the percentage of the overall number used (selected randomly).
+     */
     private static final double DEFAULT_NUMBER_OF_QUERY_TERMS = 0.33;
+
+    /**
+     * number of candidate results retrieved from the index.
+     * The higher this number, the slower but more accurate the retrieval will be.
+     * 10k is a good value for starters.
+     */
     private static final int DEFAULT_NUMBER_OF_CANDIDATES = 10000;
+
+    /**
+     * If metric spaces should be used instead of BitSampling.
+     */
     private static final boolean DEFAULT_USE_METRIC_SPACES = false;
 
     public final String id;
