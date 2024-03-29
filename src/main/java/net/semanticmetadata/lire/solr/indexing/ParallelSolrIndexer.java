@@ -40,10 +40,6 @@
 package net.semanticmetadata.lire.solr.indexing;
 
 import net.semanticmetadata.lire.imageanalysis.features.GlobalFeature;
-import net.semanticmetadata.lire.imageanalysis.features.global.ColorLayout;
-import net.semanticmetadata.lire.imageanalysis.features.global.EdgeHistogram;
-import net.semanticmetadata.lire.imageanalysis.features.global.JCD;
-import net.semanticmetadata.lire.imageanalysis.features.global.PHOG;
 import net.semanticmetadata.lire.indexers.hashing.BitSampling;
 import net.semanticmetadata.lire.indexers.hashing.MetricSpaces;
 import net.semanticmetadata.lire.indexers.parallel.WorkItem;
@@ -53,11 +49,26 @@ import net.semanticmetadata.lire.utils.ImageUtils;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
-import java.io.*;
+import java.io.BufferedOutputStream;
+import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.FileReader;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Base64;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.stream.Collectors;
 
 /**
  * This indexing application allows for parallel extraction of global features from multiple image files for
@@ -198,13 +209,10 @@ public class ParallelSolrIndexer implements Runnable {
                 "       add to the other four features. ");
     }
 
-    public static String arrayToString(int[] array) {
-        StringBuilder sb = new StringBuilder(array.length * 8);
-        for (int i = 0; i < array.length; i++) {
-            if (i > 0) sb.append(' ');
-            sb.append(Integer.toHexString(array[i]));
-        }
-        return sb.toString();
+    public static String arrayToString(int[] values) {
+        return Arrays.stream(values)
+                .mapToObj(Integer::toHexString)
+                .collect(Collectors.joining(" "));
     }
 
     /**

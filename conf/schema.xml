@@ -48,7 +48,7 @@
     </fieldType>
 
 <!-- Dynamic fields for LIRE Solr -->
-<dynamicField name="*_ha" type="pints" indexed="true"  stored="false"/> <!-- if you are using BitSampling -->
+<dynamicField name="*_ha" type="text_ws" indexed="true" stored="false"/> <!-- if you are using BitSampling -->
 <dynamicField name="*_ms" type="text_ws" indexed="true" stored="false"/> <!-- if you are using Metric Spaces Indexing -->
 <dynamicField name="*_hi" type="binaryDV" indexed="false" stored="true"/>
 <fieldtype name="binaryDV" class="net.semanticmetadata.lire.solr.BinaryDocValuesField"/>

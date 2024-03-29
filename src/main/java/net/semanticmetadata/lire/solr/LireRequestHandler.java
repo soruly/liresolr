@@ -50,7 +50,6 @@ import net.semanticmetadata.lire.solr.tools.Utilities;
 import net.semanticmetadata.lire.utils.StatsUtils;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.lucene.analysis.core.WhitespaceAnalyzer;
-import org.apache.lucene.document.IntPoint;
 import org.apache.lucene.index.BinaryDocValues;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.MultiDocValues;
@@ -62,6 +61,7 @@ import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.Query;
+import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.util.BytesRef;
 import org.apache.solr.common.SolrDocument;
@@ -85,7 +85,6 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -94,6 +93,7 @@ import java.util.StringTokenizer;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
 
+import static java.util.Comparator.comparingInt;
 import static java.util.stream.Collectors.toList;
 import static net.semanticmetadata.lire.solr.MathUtils.clampInt;
 
@@ -157,7 +157,7 @@ public class LireRequestHandler extends RequestHandlerBase {
                     query = new MatchAllDocsQuery();
                     rsp.add("Note", "Switching to AllDocumentsQuery because accuracy is set higher than 0.9.");
                 } else {
-                    query = getQuery(req.getCore().getName(), parameters, queryFeature, rsp);
+                    query = getQuery(searcher, parameters, queryFeature, rsp);
                 }
                 doSearch(req, rsp, searcher, parameters, getFilterQueries(req), query, queryFeature);
             } else {
@@ -212,7 +212,7 @@ public class LireRequestHandler extends RequestHandlerBase {
         try {
             BufferedImage img = readImageFromStream(req, rsp);
             feat = extractImageFeatures(parameters.field, img);
-            query = getQuery(req.getCore().getName(), parameters, feat, rsp);
+            query = getQuery(req.getSearcher(), parameters, feat, rsp);
         } catch (Exception e) {
             rsp.add("Error", "Error reading image from upload: " + e.getMessage());
             e.printStackTrace();
@@ -256,17 +256,16 @@ public class LireRequestHandler extends RequestHandlerBase {
 
             int[] hashes = BitSampling.generateHashes(feat.getFeatureVector());
 
-            String hashStrings = Arrays.stream(hashes)
-                    .boxed()
-                    .map(hash -> Integer.toString(hash))
-                    .collect(Collectors.joining(","));
+            String hashesString = Arrays.stream(hashes)
+                    .mapToObj(Integer::toHexString)
+                    .collect(Collectors.joining(" "));
 
-            String queryableHashes = computeQueryableHashes(parameters.field, hashes, parameters.numberOfQueryTerms)
-                    .stream()
-                    .map(hash -> Integer.toString(hash))
-                    .collect(Collectors.joining(","));
+            String queryableHashes = String.join(
+                    " ",
+                    computeQueryableHashes(parameters.field, hashes, parameters.numberOfQueryTerms)
+            );
 
-            rsp.add("bs_list", hashStrings);
+            rsp.add("bs_list", hashesString);
             rsp.add("bs_query", queryableHashes);
 
             if (MetricSpaces.supportsFeature(feat)) {
@@ -446,22 +445,29 @@ public class LireRequestHandler extends RequestHandlerBase {
      * then only using the most distinctive ones, defined by sizePercentage in [0, 1], sizePercentage=1 takes all.
      */
     private BooleanQuery createQuery(int[] hashes, String paramField, double sizePercentage) {
-        Collection<Integer> queryableHashes = computeQueryableHashes(paramField, hashes, sizePercentage);
-        Query hashesQuery = IntPoint.newSetQuery(paramField, queryableHashes);
+        Collection<String> queryableHashes = computeQueryableHashes(paramField, hashes, sizePercentage);
 
-        return new BooleanQuery.Builder()
-                .add(hashesQuery, BooleanClause.Occur.SHOULD)
-                .build();
+        BooleanQuery.Builder queryBuilder = new BooleanQuery.Builder();
+        for (var queryableHash : queryableHashes) {
+            queryBuilder.add(new BooleanClause(new TermQuery(new Term(paramField, queryableHash)), BooleanClause.Occur.SHOULD));
+        }
+        return queryBuilder.build();
     }
 
-    private Collection<Integer> computeQueryableHashes(String paramField, int[] hashes, double sizePercentage) {
-        int hashesCount = clampInt((int) Math.floor(hashes.length * sizePercentage), 1, hashes.length);
-        return Arrays.stream(hashes)
-                .boxed()
-                .filter(hash -> HashFrequenciesCache.getHashFrequency(paramField, hash) > 0)
-                .sorted(Comparator.comparingInt(hash -> HashFrequenciesCache.getHashFrequency(paramField, hash)))
-                .limit(hashesCount)
+    private Collection<String> computeQueryableHashes(String paramField, int[] hashes, double sizePercentage) {
+        int wantedQueryHashesCount = clampInt((int) Math.floor(hashes.length * sizePercentage), 1, hashes.length);
+
+        var hashesByFrequency = Arrays.stream(hashes)
+                .mapToObj(Integer::toHexString)
+                .sorted(comparingInt(hash -> HashFrequenciesCache.getHashFrequency(paramField, hash)))
                 .collect(toList());
+
+        while (hashesByFrequency.size() > 3 && HashFrequenciesCache.getHashFrequency(paramField, hashesByFrequency.get(0)) <= 0) {
+            hashesByFrequency.remove(0);
+        }
+
+        var availableHashesCount = Math.min(wantedQueryHashesCount, hashesByFrequency.size());
+        return hashesByFrequency.subList(0, availableHashesCount);
     }
 
     private BytesRef getBytesRef(BinaryDocValues bdv, int docId) throws IOException {
@@ -483,9 +489,9 @@ public class LireRequestHandler extends RequestHandlerBase {
         return feature;
     }
 
-    private Query getQuery(String coreName, SearchParameters parameters, GlobalFeature feat, SolrQueryResponse rsp) throws ParseException {
+    private Query getQuery(SolrIndexSearcher searcher, SearchParameters parameters, GlobalFeature feat, SolrQueryResponse rsp) throws ParseException {
         if (!parameters.useMetricSpaces) {
-            HashFrequenciesCache.updateAll(coreName); // FIXME Remove and run in a spare thread.
+            HashFrequenciesCache.updateParameterField(searcher, parameters.field);
             int[] hashes = BitSampling.generateHashes(feat.getFeatureVector());
             return createQuery(hashes, parameters.field, parameters.numberOfQueryTerms);
         }

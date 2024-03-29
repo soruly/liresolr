@@ -1,102 +1,69 @@
 package net.semanticmetadata.lire.solr;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.collect.Streams;
+import org.apache.lucene.index.Terms;
+import org.apache.lucene.index.TermsEnum;
+import org.apache.lucene.util.BytesRef;
+import org.apache.solr.search.SolrIndexSearcher;
 
-import java.net.URI;
-import java.net.URLEncoder;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
-import java.util.stream.Collectors;
 
-import static java.nio.charset.StandardCharsets.UTF_8;
-
+import static java.util.Collections.emptyMap;
 
 public final class HashFrequenciesCache {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final HashMap<String, Map<String, Integer>> HASH_FREQUENCIES = new HashMap<>();
 
-    private static final HashMap<String, Map<Integer, Integer>> HASH_FREQUENCIES = new HashMap<>();
-
-    public static int getHashFrequency(String field, int hash) {
+    public static int getHashFrequency(String field, String hash) {
         final var termStats = HASH_FREQUENCIES.get(field);
         return termStats != null
                 ? termStats.getOrDefault(hash, 0)
                 : 0;
     }
 
-    public static void updateAll(String coreName) {
+    public static void updateAllCommit(SolrIndexSearcher searcher) {
         for (String code : FeatureRegistry.getSupportedCodes()) {
-            update(coreName, code + "_ha", false);
+            update(searcher, code + "_ha", true);
         }
     }
 
-    public static void updateAllCommit(String coreName) {
-        for (String code : FeatureRegistry.getSupportedCodes()) {
-            update(coreName, code + "_ha", true);
-        }
+    public static void updateParameterField(SolrIndexSearcher searcher, String field) {
+        update(searcher, field, false);
     }
 
-    public static void update(String coreName, String field, boolean wasCommit) {
+    private static void update(SolrIndexSearcher searcher, String field, boolean wasCommit) {
         if (!wasCommit && HASH_FREQUENCIES.containsKey(field)) {
             return;
         }
 
-        final var hashesCountCache = getFieldData(coreName, field)
-                .map(HashFrequenciesCache::getResults)
-                .orElseGet(Map::of);
-
-        HASH_FREQUENCIES.put(field, hashesCountCache);
+        var termCounts = getTermCounts(searcher, field);
+        HASH_FREQUENCIES.put(field, termCounts);
     }
 
-    private static Map<Integer, Integer> getResults(JsonNode node) {
-        var elements = node.get("facets")
-                .get("categories")
-                .get("buckets")
-                .elements();
-
-        return Streams.stream(elements)
-                .collect(Collectors.toMap(
-                        element -> element.get("val").asInt(),
-                        element -> element.get("count").asInt())
-                );
-    }
-
-    private static Optional<JsonNode> getFieldData(String coreName, String fieldName) {
-        var queryUri = getFieldUri(coreName, fieldName);
-
+    private static Map<String, Integer> getTermCounts(SolrIndexSearcher searcher, String field) {
         try {
-            var httpClient = HttpClient.newBuilder()
-                    .version(HttpClient.Version.HTTP_1_1)
-                    .followRedirects(HttpClient.Redirect.NEVER)
-                    .build();
+            Terms terms = searcher.getSlowAtomicReader().terms(field);
 
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(queryUri))
-                    .header("Accept", "application/json")
-                    .GET()
-                    .build();
+            if (terms == null) {
+                return emptyMap();
+            }
 
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            final var termCounts = new HashMap<String, Integer>(4096);
+            TermsEnum termsEnum = terms.iterator();
+            BytesRef term;
 
-            var result = OBJECT_MAPPER.readTree(response.body());
+            while ((term = termsEnum.next()) != null) {
+                termCounts.put(term.utf8ToString(), termsEnum.docFreq());
+            }
 
-            return Optional.ofNullable(result);
-        } catch (Exception e) {
+            return termCounts;
+        } catch (IOException e) {
             System.err.println(e);
-            System.err.println("Failed to get hashes info: " + queryUri);
+            System.err.println("Failed to load hash terms for field: " + field);
         }
 
-        return Optional.empty();
-    }
-
-    private static String getFieldUri(String core, String fieldName) {
-        return "http://127.0.0.1:8983/solr/" + core + "/select?q=*:*&json.facet=" + URLEncoder.encode("{categories:{terms:{field:" + fieldName + ",limit:-1}}}", UTF_8) + "&rows=0&indent=false";
+        return emptyMap();
     }
 
 }
