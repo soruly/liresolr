@@ -20,7 +20,7 @@ jobs:
         uses: gradle/wrapper-validation-action@e6e38bacfdf1a337459f332974bb2327a31aaf4b
       - name: Build Solr plugin
         run: ./gradlew distForSolr
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v4
         with:
           name: dist
           path: dist
@@ -52,8 +52,6 @@ jobs:
 
       - name: Download all workflow run artifacts
         uses: actions/download-artifact@v4
-        with:
-          pattern: "**/*"
 
       - name: Build and push
         id: docker_build
