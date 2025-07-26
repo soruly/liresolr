@@ -22,12 +22,12 @@ dependencies {
     implementation 'org.apache.lucene:lucene-queries:8.11.4'
 
     // ---< Solr >---
-    implementation 'org.apache.solr:solr-core:8.11.4'
-    implementation 'org.apache.solr:solr-dataimporthandler:8.11.4'
-    implementation 'org.apache.solr:solr-solrj:8.11.4'
+    implementation 'org.apache.solr:solr-core:9.8.0'
+    implementation 'org.apache.solr:solr-dataimporthandler:9.8.0'
+    implementation 'org.apache.solr:solr-solrj:9.8.0'
 
     // ---< Commons >---
-    implementation 'commons-io:commons-io:2.6'
+    implementation 'commons-io:commons-io:2.14.0'
     implementation 'org.apache.commons:commons-math3:3.6.1'
     implementation 'commons-codec:commons-codec:1.11'
     implementation 'commons-cli:commons-cli:1.4'
@@ -37,14 +37,14 @@ dependencies {
     implementation 'com.twelvemonkeys.imageio:imageio-jpeg:3.4.1'
 
     // ---< Dom4j & Jaxen for XPath because StaX is often too complicated >---
-    implementation 'org.dom4j:dom4j:2.1.1'
+    implementation 'org.dom4j:dom4j:2.1.5'
     implementation 'jaxen:jaxen:1.1.6'
 
     // ---< Current version of LIRE >---
     implementation fileTree(dir: 'lib', include: '*.jar')
 
     // https://mvnrepository.com/artifact/junit/junit
-    testImplementation group: 'junit', name: 'junit', version: '4.12'
+    testImplementation group: 'junit', name: 'junit', version: '4.13.1'
 
 }
 
